@@ -79,8 +79,8 @@ note that for other connectors you should add their respective environment varia
 ```plain text
 CELERY_BROKER_URL=redis://redis:6379/0
 CELERY_BROKER_URL=redis://localhost:6379/0
-CELERY_RESULT_BACKEND=db+mysql://root:rootpassword@mysql:3306/indima
-CELERY_RESULT_BACKEND=db+mysql://root:rootpassword@localhost:3306/indima
+CELERY_RESULT_BACKEND=db+mysql://root:rootpassword@mysql:3306/db_name
+CELERY_RESULT_BACKEND=db+mysql://root:rootpassword@localhost:3306/db_name
 ```
 
 
