@@ -26,3 +26,8 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.extras]
 ai = ["torch", "mlflow"]
+dev = ["typer"]
+
+
+[tool.poetry.scripts]
+minix = "minix.core.cli.cli:app"
