@@ -1,9 +1,9 @@
 from typing import Type, TypeVar, List
 from sqlalchemy.orm import Session
 
-from src.minix.core.entity import SqlEntity
-from src.minix.core.repository import Repository
-from src.minix.core.connectors.sql_connector.sql_connector import SqlConnector
+from minix.core.entity import SqlEntity
+from minix.core.repository import Repository
+from minix.core.connectors.sql_connector.sql_connector import SqlConnector
 
 
 T = TypeVar('T', bound=SqlEntity)
