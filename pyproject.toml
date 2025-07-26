@@ -1,6 +1,6 @@
 [project]
 name = "minix"
-version = "0.1.17"
+version = "0.1.18"
 description = "A modular Python framework for backend, AI, and data projects"
 authors = [
     {name = "AmirHossein Advari",email = "amiradvari@gmail.com"}
@@ -17,6 +17,7 @@ dependencies = [
     "sqlalchemy (>=2.0.41,<3.0.0)",
     "dotenv (>=0.9.9,<0.10.0)",
     "pymysql (>=1.1.1,<2.0.0)",
+    "celery-redbeat (>= 2.3.2)",
 ]
 
 
