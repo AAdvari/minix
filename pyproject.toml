@@ -1,6 +1,6 @@
 [project]
 name = "minix"
-version = "0.1.13"
+version = "0.1.14"
 description = "A modular Python framework for backend, AI, and data projects"
 authors = [
     {name = "AmirHossein Advari",email = "amiradvari@gmail.com"}
