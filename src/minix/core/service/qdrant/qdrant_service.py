@@ -1,8 +1,8 @@
 from typing import TypeVar, List
 
-from src.minix.core.entity import QdrantEntity
-from src.minix.core.repository.qdrant.qdrant_repository import QdrantRepository
-from src.minix.core.service import Service
+from minix.core.entity import QdrantEntity
+from minix.core.repository.qdrant.qdrant_repository import QdrantRepository
+from minix.core.service import Service
 
 T = TypeVar('T', bound=QdrantEntity)
 

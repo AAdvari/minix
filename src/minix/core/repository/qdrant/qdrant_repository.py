@@ -1,8 +1,8 @@
 from typing import TypeVar, Type, List
 from qdrant_client.grpc import PointStruct
-from src.minix.core.entity import QdrantEntity
-from src.minix.core.connectors.qdrant_connector import QdrantConnector
-from src.minix.core.repository import Repository
+from minix.core.entity import QdrantEntity
+from minix.core.connectors.qdrant_connector import QdrantConnector
+from minix.core.repository import Repository
 
 T = TypeVar('T', bound=QdrantEntity)
 class QdrantRepository(Repository[T]):

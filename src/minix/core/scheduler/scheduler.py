@@ -1,6 +1,6 @@
 from typing import Self
 from celery import Celery
-from src.minix.core.scheduler.task import PeriodicTask, Task
+from minix.core.scheduler.task import PeriodicTask, Task
 
 
 class SchedulerConfig:

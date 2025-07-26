@@ -1,7 +1,7 @@
 from typing import TypeVar, Type
 
-from src.minix.core.entity import RedisEntity
-from src.minix.core.repository import Repository
+from minix.core.entity import RedisEntity
+from minix.core.repository import Repository
 from redis import Redis
 
 T = TypeVar('T', bound=RedisEntity)

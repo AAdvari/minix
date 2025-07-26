@@ -1,8 +1,8 @@
 from typing import TypeVar, List
 
-from src.minix.core.entity import SqlEntity
-from src.minix.core.repository import SqlRepository
-from src.minix.core.service import Service
+from minix.core.entity import SqlEntity
+from minix.core.repository import SqlRepository
+from minix.core.service import Service
 
 
 T = TypeVar('T', bound=SqlEntity)

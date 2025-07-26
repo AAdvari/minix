@@ -1,7 +1,7 @@
 from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy import create_engine
 
-from src.minix.core.connectors import Connector
+from minix.core.connectors import Connector
 
 
 class SqlConnectorConfig:

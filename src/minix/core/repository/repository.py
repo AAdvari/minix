@@ -1,5 +1,5 @@
 from typing import Type, Generic, TypeVar
-from src.minix.core.entity import Entity
+from minix.core.entity import Entity
 
 T = TypeVar('T', bound=Entity)
 

@@ -1,6 +1,6 @@
 from qdrant_client import AsyncQdrantClient
 
-from src.core.connectors import Connector
+from minix.core.connectors import Connector
 
 
 class QdrantConnector(Connector):

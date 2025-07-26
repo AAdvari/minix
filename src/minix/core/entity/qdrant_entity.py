@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import List, Dict, Any
 
 from pydantic import BaseModel
-from src.minix.core.entity import Entity
+from minix.core.entity import Entity
 
 
 class QdrantEntity(Entity, BaseModel):

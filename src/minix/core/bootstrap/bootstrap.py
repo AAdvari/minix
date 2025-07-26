@@ -1,10 +1,10 @@
 import pymysql
 
-from src.minix.core.connectors import Connector
-from src.minix.core.module import Module
+from minix.core.connectors import Connector
+from minix.core.module import Module
 from fastapi import FastAPI
-from src.minix.core.registry import Registry
-from src.minix.core.scheduler import SchedulerConfig, Scheduler
+from minix.core.registry import Registry
+from minix.core.scheduler import SchedulerConfig, Scheduler
 pymysql.install_as_MySQLdb()
 import os
 import dotenv
