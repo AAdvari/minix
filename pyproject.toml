@@ -1,6 +1,6 @@
 [project]
 name = "minix"
-version = "0.1.16"
+version = "0.1.17"
 description = "A modular Python framework for backend, AI, and data projects"
 authors = [
     {name = "AmirHossein Advari",email = "amiradvari@gmail.com"}
@@ -11,6 +11,7 @@ dependencies = [
     "fastapi (>=0.116.1,<0.117.0)",
     "uvicorn (>=0.35.0,<0.36.0)",
     "celery (>=5.5.3,<6.0.0)",
+    "redis (>=4.6.0,<5.0.0)",
     "boto3 (>=1.39.14,<2.0.0)",
     "aiokafka (>=0.12.0,<0.13.0)",
     "sqlalchemy (>=2.0.41,<3.0.0)",
