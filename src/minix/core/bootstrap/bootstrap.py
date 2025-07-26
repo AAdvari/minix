@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import pymysql
 
 from minix.core.connectors import Connector
@@ -11,9 +13,9 @@ import dotenv
 dotenv.load_dotenv()
 
 
-def register_connectors(connectors: list[Connector]):
-    for connector in connectors:
-        Registry().register(connector.__class__, connector)
+def register_connectors(connectors: list[Tuple[Connector, str | None]]):
+    for connector, salt in connectors:
+        Registry().register(connector.__class__, connector, salt = salt)
 def register_scheduler():
     Registry().register(Scheduler, Scheduler(
         SchedulerConfig()
@@ -47,7 +49,7 @@ def register_modules(modules: list[Module]):
 
 def bootstrap(
         modules: list[Module] = None,
-        connectors: list[Connector] = None
+        connectors: list[Tuple[Connector, str | None]] = None
 ):
 
     if modules:
