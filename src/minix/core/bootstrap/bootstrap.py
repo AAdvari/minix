@@ -15,7 +15,11 @@ dotenv.load_dotenv()
 
 def register_connectors(connectors: list[Tuple[Connector, str | None]]):
     for connector, salt in connectors:
-        Registry().register(connector.__class__, connector, salt = salt)
+        if salt is not None:
+            Registry().register(connector.__class__, connector, salt=salt)
+        else:
+            Registry().register(connector.__class__)
+
 def register_scheduler():
     Registry().register(Scheduler, Scheduler(
         SchedulerConfig()
