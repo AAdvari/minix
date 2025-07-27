@@ -56,9 +56,9 @@ def bootstrap(
         connectors: list[Tuple[Connector, str | None]] = None
 ):
 
-    if modules:
-        register_modules(modules)
     if connectors:
         register_connectors(connectors)
+    if modules:
+        register_modules(modules)
 
 
