@@ -18,7 +18,7 @@ def register_connectors(connectors: list[Tuple[Connector, str | None]]):
         if salt is not None:
             Registry().register(connector.__class__, connector, salt=salt)
         else:
-            Registry().register(connector.__class__)
+            Registry().register(connector.__class__, connector)
 
 def register_scheduler():
     Registry().register(Scheduler, Scheduler(
