@@ -3,7 +3,7 @@ name = "minix"
 version = "0.1.24"
 description = "A modular Python framework for backend, AI, and data projects"
 authors = [
-    {name = "AmirHossein Advari",email = "amiradvari@gmail.com"}
+    { name = "AmirHossein Advari", email = "amiradvari@gmail.com" }
 ]
 readme = "README.md"
 requires-python = ">=3.10"
@@ -28,6 +28,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.extras]
 ai = ["torch", "mlflow", "qdrant-client"]
+clickhouse = ["clickhouse-sqlalchemy", "clickhouse-driver"]
 dev = ["typer"]
 
 
