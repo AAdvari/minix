@@ -60,7 +60,6 @@ class SqlConnector(Connector):
         self.port = sql_connector_config.port
         self.database = sql_connector_config.database
         self.driver = sql_connector_config.driver
-        print(self.get_connection_string(self.driver))
         self.engine = create_engine(
             self.get_connection_string(self.driver),
             echo=False,
@@ -93,4 +92,4 @@ class SqlConnector(Connector):
         return f'mysql+pymysql://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}'
 
     def clickhouse_connection_string(self) -> str:
-        return f'clickhouse://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}'
+        return f'clickhouse+native://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}'
