@@ -12,6 +12,7 @@ class AsyncConsumerConfig(BaseModel):
     group_id: str
     bootstrap_servers: List[str] | None = None
     name: str
+    auto_offset_reset: str = "earliest"
 
 class AsyncConsumer(ABC):
     def __init__(self):
@@ -40,7 +41,8 @@ class AsyncConsumer(ABC):
         self._consumer = AIOKafkaConsumer(
             topic,
             **config.model_dump(),
-            value_deserializer=lambda m: json.loads(m.decode("utf-8"))
+            value_deserializer=lambda m: json.loads(m.decode("utf-8")),
+            auto_offset_reset=config.auto_offset_reset,
         )
 
         await self._consumer.start()
