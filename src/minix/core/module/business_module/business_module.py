@@ -102,7 +102,7 @@ class BusinessModule(Module):
                 if bootstrap_servers is None:
                     raise ValueError("Bootstrap servers must be provided either in the config or as an environment variable")
                 config.bootstrap_servers = [server.strip() for server in bootstrap_servers.split(",")]
-
+            consumer_obj.set_config(config)
             api = Registry().get(FastAPI)
             api.add_event_handler(
                 'startup',
