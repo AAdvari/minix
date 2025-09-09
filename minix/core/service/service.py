@@ -1,5 +1,4 @@
 from typing import Generic, TypeVar
-
 from minix.core.entity import Entity
 from minix.core.repository import Repository
 

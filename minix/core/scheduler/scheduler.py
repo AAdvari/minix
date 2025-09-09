@@ -90,16 +90,33 @@ class Scheduler(Celery):
         self.get_app().register_task(task)
         return self
 
+    # def register_periodic_task(self, task: PeriodicTask):
+    #     registering_task = task
+    #     self.get_app().register_task(registering_task)
+    #     self.get_app().conf.beat_schedule = {
+    #         registering_task.get_name(): {
+    #             'task': registering_task.get_name(),
+    #             'schedule': registering_task.get_schedule(),
+    #             'args': registering_task.get_args(),
+    #             'kwargs': registering_task.get_kwargs()
+    #         }
+    #     }
+    #     return self
+
     def register_periodic_task(self, task: PeriodicTask):
-        registering_task = task
-        self.get_app().register_task(registering_task)
-        self.get_app().conf.beat_schedule = {
-            registering_task.get_name(): {
-                'task': registering_task.get_name(),
-                'schedule': registering_task.get_schedule(),
-                'args': registering_task.get_args(),
-                'kwargs': registering_task.get_kwargs()
-            }
+        app = self.get_app()
+        app.register_task(task)
+
+        # merge instead of replace
+        beat = getattr(app.conf, "beat_schedule", {}) or {}
+        beat[task.get_name()] = {
+            "task": task.get_name(),  # must be the registered task name
+            "schedule": task.get_schedule(),  # e.g. crontab(minute="*") / timedelta(...)
+            "args": task.get_args(),
+            "kwargs": task.get_kwargs(),
+            # "options": {"queue": "default"},     # optional
         }
+        app.conf.beat_schedule = beat  # assign merged dict
+
         return self
 
