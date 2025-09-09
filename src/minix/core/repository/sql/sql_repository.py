@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from src.minix.core.entity import SqlEntity
 from src.minix.core.repository import Repository
-from src.minix.core.connectors.sql_connector.sql_connector import SqlConnector
+from src.minix.core.connectors.sql_connector import SqlConnector
 
 
 T = TypeVar('T', bound=SqlEntity)
