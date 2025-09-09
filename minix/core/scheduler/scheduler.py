@@ -110,13 +110,11 @@ class Scheduler(Celery):
         # merge instead of replace
         beat = getattr(app.conf, "beat_schedule", {}) or {}
         beat[task.get_name()] = {
-            "task": task.get_name(),  # must be the registered task name
-            "schedule": task.get_schedule(),  # e.g. crontab(minute="*") / timedelta(...)
+            "task": task.get_name(),
+            "schedule": task.get_schedule(),
             "args": task.get_args(),
             "kwargs": task.get_kwargs(),
-            # "options": {"queue": "default"},     # optional
         }
-        app.conf.beat_schedule = beat  # assign merged dict
-
+        app.conf.beat_schedule = beat
         return self
 
