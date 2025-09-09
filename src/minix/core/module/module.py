@@ -1,14 +1,14 @@
 from abc import ABC
 from typing import Self, Type, List, Tuple, Dict
 
-from minix.core.consumer import AsyncConsumer
-from minix.core.controller import Controller
-from minix.core.entity import Entity
-from minix.core.install import Installable
-from minix.core.model import Model
-from minix.core.repository import Repository
-from minix.core.scheduler.task import PeriodicTask, Task
-from minix.core.service import Service
+from src.minix.core.consumer import AsyncConsumer
+from src.minix.core.controller import Controller
+from src.minix.core.entity import Entity
+from src.minix.core.install import Installable
+from src.minix.core.model import Model
+from src.minix.core.repository import Repository
+from src.minix.core.scheduler.task import PeriodicTask, Task
+from src.minix.core.service import Service
 
 
 class Module(Installable, ABC):

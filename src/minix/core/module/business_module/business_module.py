@@ -1,12 +1,12 @@
 import os
 from typing import Self
 from fastapi import FastAPI
-from minix.core.module import Module
-from minix.core.registry.registry import Registry
-from minix.core.repository import SqlRepository
-from minix.core.repository import RedisRepository
-from minix.core.scheduler import Scheduler
-from minix.core.connectors.sql_connector import SqlConnector
+from src.minix.core.module import Module
+from src.minix.core.registry.registry import Registry
+from src.minix.core.repository import SqlRepository
+from src.minix.core.repository import RedisRepository
+from src.minix.core.scheduler import Scheduler
+from src.minix.core.connectors.sql_connector import SqlConnector
 
 
 class BusinessModule(Module):

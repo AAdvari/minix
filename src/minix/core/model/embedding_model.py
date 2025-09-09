@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 import numpy as np
-from minix.core.model import Model
+from src.minix.core.model import Model
 
 
 class EmbeddingModel(Model, ABC):

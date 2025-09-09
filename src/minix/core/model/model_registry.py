@@ -1,6 +1,6 @@
 from typing import Self, Type, TypeVar
 
-from minix.core.utils import SingletonMeta
+from src.minix.core.utils import SingletonMeta
 
 T = TypeVar('T')
 

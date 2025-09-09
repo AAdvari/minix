@@ -1,9 +1,9 @@
 from typing import Type, TypeVar, List
 from sqlalchemy.orm import Session
 
-from minix.core.entity import SqlEntity
-from minix.core.repository import Repository
-from minix.core.connectors.sql_connector.sql_connector import SqlConnector
+from src.minix.core.entity import SqlEntity
+from src.minix.core.repository import Repository
+from src.minix.core.connectors.sql_connector.sql_connector import SqlConnector
 
 
 T = TypeVar('T', bound=SqlEntity)
@@ -60,6 +60,15 @@ class SqlRepository(Repository[T]):
                 session.add(entity)
             session.commit()
         return entities
+    def save_bulk(self, entities: List[T], chunk_size: int)-> int:
+        total = 0
+        with self.get_session() as session:
+            for i in range(0, len(entities), chunk_size):
+                chunk = entities[i: i + chunk_size]
+                session.add_all(chunk)
+                total += len(chunk)
+            session.commit()
+        return total
 
 
 

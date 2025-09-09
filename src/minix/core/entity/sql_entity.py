@@ -2,7 +2,7 @@ from datetime import datetime
 
 from sqlalchemy import Integer, DateTime, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, MappedAsDataclass
-from minix.core.entity import Entity
+from src.minix.core.entity import Entity
 
 class Base(DeclarativeBase):
     pass

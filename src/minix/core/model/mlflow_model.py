@@ -10,7 +10,7 @@ import torch
 from loguru import logger
 import os
 
-from minix.core.model import Model
+from src.minix.core.model import Model
 
 
 class MlflowModel(mlflow.pyfunc.PythonModel):

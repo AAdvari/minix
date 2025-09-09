@@ -1,7 +1,7 @@
 from typing import Generic, TypeVar
 
-from minix.core.entity import Entity
-from minix.core.repository import Repository
+from src.minix.core.entity import Entity
+from src.minix.core.repository import Repository
 
 
 T = TypeVar('T', bound=Entity)
