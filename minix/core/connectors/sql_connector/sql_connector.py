@@ -51,9 +51,9 @@ class SqlConnectorConfig:
         self.database = d.get('database')
         self.driver = d.get('driver')
 
-        self.connect_timeout = d.get('connect_timeout', 30)
-        self.read_timeout = d.get('read_timeout', 60)
-        self.write_timeout = d.get('write_timeout', 60)
+        self.connect_timeout = d.get('connect_timeout', 120)
+        self.read_timeout = d.get('read_timeout', 120)
+        self.write_timeout = d.get('write_timeout', 120)
         self.send_receive_timeout = d.get('send_receive_timeout', 600)
         self.pool_timeout = d.get('pool_timeout', 60)
         self.pool_recycle = d.get('pool_recycle', 3600)
