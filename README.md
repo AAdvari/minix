@@ -537,4 +537,5 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Author
 
-**AmirHossein Advari** - [amiradvari@gmail.com](mailto:amiradvari@gmail.com)
+**AmirHossein Advari** - [amiradvari@gmail.com](mailto:amiradvari@gmail.com), \
+**Shirin Dehghani** - [shirin.dehghani1996@gmail.com](mail:shirin.dehghani1996@gmail.com)
