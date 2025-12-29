@@ -1,5 +1,6 @@
 # Minix
 
+
 **Minix** is a modular Python framework for building backend, AI, and data-driven applications. It provides a clean, layered architecture with built-in support for REST APIs, task scheduling, message queues, and machine learning workflows.
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
@@ -13,7 +14,6 @@
 - [Key Features](#key-features)
 - [Architecture Overview](#architecture-overview)
 - [Installation](#installation)
-- [Quick Start](#quick-start)
 - [Core Concepts](#core-concepts)
   - [Bootstrap](#bootstrap)
   - [Modules](#modules)
@@ -86,63 +86,6 @@ pip install minix
 git clone <repository-url>
 cd minix
 pip install -e .
-```
-
----
-
-## Quick Start
-
-### 1. Initialize a Project
-
-```bash
-minix init my_project
-```
-
-### 2. Create Your Application
-
-```python
-from minix.core.bootstrap import bootstrap
-from minix.core.connectors.sql_connector import SqlConnector, SqlConnectorConfig
-from minix.core.module.business_module import BusinessModule
-
-# Configure your database connector
-sql_config = SqlConnectorConfig(
-    username="root",
-    password="password",
-    host="localhost",
-    port=3306,
-    database="mydb",
-    driver="mysql"
-)
-sql_connector = SqlConnector(sql_config)
-
-# Define your module
-class UserModule(BusinessModule):
-    def __init__(self):
-        super().__init__("user")
-        self.add_entity(UserEntity)
-        self.add_repository(UserRepository)
-        self.add_service(UserService)
-        self.add_controller(UserController)
-
-# Bootstrap the application
-bootstrap(
-    modules=[UserModule()],
-    connectors=[(sql_connector, None)]
-)
-```
-
-### 3. Run Your Application
-
-```bash
-# Start the FastAPI server
-uvicorn main:app --reload
-
-# Start Celery workers (if using tasks)
-celery -A main worker --loglevel=info
-
-# Start Celery beat (if using periodic tasks)
-celery -A main beat --loglevel=info
 ```
 
 ---
