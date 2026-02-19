@@ -1,6 +1,13 @@
-from typing import Self
+from __future__ import annotations
+
+from typing import Optional, Self
+
 from celery import Celery
+from celery.canvas import Signature
+
 from minix.core.scheduler.task import PeriodicTask, Task
+from minix.core.scheduler.workflow import Workflow, WorkflowError
+from minix.core.scheduler.workflow_tasks import IdentityTask
 
 
 class SchedulerConfig:
@@ -75,16 +82,34 @@ class Scheduler(Celery):
         self.celery.conf.accept_content = config.get_accept_content()
         self.celery.conf.timezone = config.get_timezone()
 
+        self.celery.register_task(IdentityTask())
+
     def get_app(self):
         return self.celery
 
-
     def run_task(self, task: Task):
-        self.get_app().send_task(
+        # Return AsyncResult so caller can track id
+        return self.get_app().send_task(
             task.get_name(),
             args=task.get_args(),
             kwargs=task.get_kwargs()
         )
+
+    def run_workflow(
+            self,
+            wf: Workflow,
+            *,
+            target_node_id: Optional[str] = None,
+            link_error: Optional[Signature] = None,
+    ):
+        # chords/joins require result_backend configured
+        if wf.uses_join() and not (self.get_app().conf.result_backend or ''):
+            raise WorkflowError(
+                "Workflow uses join nodes, but Celery result_backend is not configured."
+            )
+
+        canvas = wf.to_canvas(app=self.get_app(), target_node_id=target_node_id)
+        return canvas.apply_async(link_error=link_error) if link_error else canvas.apply_async()
 
     def register_async_task(self, task: Task):
         self.get_app().register_task(task)
@@ -117,4 +142,3 @@ class Scheduler(Celery):
         }
         app.conf.beat_schedule = beat
         return self
-
