@@ -3,7 +3,7 @@
 
 **Minix** is a modular Python framework for building backend, AI, and data-driven applications. It provides a clean, layered architecture with built-in support for REST APIs, task scheduling, message queues, and machine learning workflows.
 
-![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
+![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)
 ![Version](https://img.shields.io/badge/version-0.1.32-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey.svg)
 
@@ -23,11 +23,19 @@
   - [Controllers](#controllers)
   - [Connectors](#connectors)
   - [Tasks & Scheduling](#tasks--scheduling)
+    - [Async Task](#async-task)
+    - [Periodic Task](#periodic-task)
+    - [Running Tasks Manually](#running-tasks-manually)
+    - [Workflows (DAG Scheduling)](#workflows-dag-scheduling)
   - [Kafka Consumers](#kafka-consumers)
   - [ML Models](#ml-models)
 - [Configuration](#configuration)
 - [Extras](#extras)
+- [Registry Usage](#registry-usage)
+- [CLI Commands](#cli-commands)
 - [License](#license)
+- [Contributing](#contributing)
+- [Author](#author)
 
 ---
 
@@ -149,7 +157,7 @@ from minix.core.entity import SqlEntity
 
 class UserEntity(SqlEntity):
     __tablename__ = "users"
-    
+
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
 ```
@@ -163,7 +171,7 @@ from minix.core.entity import QdrantEntity
 
 class DocumentEntity(QdrantEntity):
     content: str
-    
+
     @staticmethod
     def collection() -> str:
         return "documents"
@@ -225,7 +233,7 @@ from minix.core.service import Service
 class UserService(Service[UserEntity]):
     def get_active_users(self):
         return self.repository.get_by(status="active")
-    
+
     def create_user(self, name: str, email: str) -> UserEntity:
         user = UserEntity(name=name, email=email)
         return self.repository.save(user)
@@ -242,13 +250,13 @@ from minix.core.registry import Registry
 class UserController(Controller):
     def get_prefix(self):
         return "/users"
-    
+
     def define_routes(self):
         @self.router.get("/")
         def get_users():
             service = Registry().get(UserService)
             return service.get_repository().get_all()
-        
+
         @self.router.post("/")
         def create_user(name: str, email: str):
             service = Registry().get(UserService)
@@ -317,7 +325,7 @@ from minix.core.scheduler.task import Task
 class ProcessOrderTask(Task):
     def get_name(self) -> str:
         return "process_order"
-    
+
     def run(self, order_id: int):
         # Process the order
         pass
@@ -332,10 +340,10 @@ from minix.core.scheduler.task import PeriodicTask
 class DailyReportTask(PeriodicTask):
     def get_name(self) -> str:
         return "daily_report"
-    
+
     def get_schedule(self) -> crontab:
         return crontab(hour=0, minute=0)  # Run at midnight
-    
+
     def run(self):
         # Generate daily report
         pass
@@ -351,6 +359,85 @@ scheduler = Registry().get(Scheduler)
 scheduler.run_task(ProcessOrderTask(order_id=123))
 ```
 
+#### Workflows (DAG Scheduling)
+
+Minix supports defining and executing **workflows as DAGs** (Directed Acyclic Graphs) where:
+- Each node is a `Task`
+- Nodes can depend on other nodes
+- Dependency results can be passed to downstream tasks
+- The workflow engine guarantees **each node runs at most once** during a workflow execution
+- If the DAG has multiple sink nodes, **all sinks are executed**
+
+##### Creating a Workflow
+
+```python
+from minix.core.registry import Registry
+from minix.core.scheduler import Scheduler
+from minix.core.scheduler.workflow import Workflow
+
+scheduler = Registry().get(Scheduler)
+
+wf = Workflow("order_pipeline")
+
+t1 = wf.add(DAGTaskTest1(in_a=aaaaa), node_id="task1")
+t2 = wf.add(DAGTaskTest2(), node_id="task2", depends_on=[t1], consume_dependency_results=True)
+t3 = wf.add(DAGTaskTest3(), node_id="task3", depends_on=[t2, t1], consume_dependency_results=True)
+t4 = wf.add(DAGTaskTest4(), node_id="task4", depends_on=[t3], consume_dependency_results=True)
+
+t5 = wf.add(DAGTaskTest5(), node_id="task5", depends_on=[t4], consume_dependency_results=True)
+
+res = scheduler.run_workflow(wf)
+```
+
+##### Dependency Result Passing
+
+For a node with `consume_dependency_results=True`:
+
+- If it has **1 dependency**, that dependency result is passed as the **first positional argument** (`arg0`) to the task.
+- If it has **multiple dependencies**, a **list of dependency results** is passed as `arg0` in the same order as `depends_on`.
+
+For a node with `consume_dependency_results=False`, no dependency result is injected.
+
+> This design allows tasks to explicitly opt in/out of consuming upstream values, while still receiving their own constructor-provided `args/kwargs`.
+
+##### Running the Entire Workflow
+
+```python
+res = scheduler.run_workflow(wf)
+print(res.id)  # Celery task id
+# output = res.get(timeout=...)  # if you want to block and fetch the final result
+```
+
+**Final result shape when running the whole workflow:**
+- If the workflow has **one sink**, the final result is that sink’s output.
+- If the workflow has **multiple sinks**, the final result is a dictionary mapping sink node ids to outputs:
+  ```python
+  {
+    "task5": <result_of_task6>,
+    "task4": <result_of_task9>
+  }
+  ```
+
+##### Running a Specific Target Node
+
+You can execute only the subgraph required to compute a particular node (useful for partial runs or debugging):
+
+```python
+res = scheduler.run_workflow(wf, target_node_id="task9")
+# output = res.get(timeout=...)
+```
+
+In this mode, only `task9` and its dependency closure are executed, and the returned value corresponds to the output of the target node (`task9`).
+
+##### Workflow Execution Guarantees
+
+When executing a workflow:
+- **No duplicate execution**: if a node is required by multiple downstream nodes, it runs once.
+- **Multiple sinks are supported**: all sink nodes run when executing the whole workflow.
+- **Full-graph execution**: when no `target_node_id` is provided, the workflow runs the entire DAG (not only the ancestry of a single sink).
+
+---
+
 ### Kafka Consumers
 
 ```python
@@ -364,7 +451,7 @@ class OrderEventConsumer(AsyncConsumer):
             group_id="order_service",
             bootstrap_servers=["localhost:9092"]
         )
-    
+
     async def run(self, message: dict):
         # Process the message
         order_id = message.get("order_id")
@@ -381,11 +468,11 @@ from minix.core.model import Model
 class MyModel(Model):
     def get_model_name(self):
         return "my_model"
-    
+
     def predict(self, model_input: dict):
         # Prediction logic
         pass
-    
+
     def set_device(self, device: str):
         self.device = device
 ```
@@ -399,15 +486,15 @@ import numpy as np
 class TextEmbedder(EmbeddingModel):
     def get_model_name(self):
         return "text_embedder"
-    
+
     def embed(self, text: str) -> np.ndarray:
         # Return embedding vector
         pass
-    
+
     def embed_batch(self, texts: list[str]) -> np.ndarray:
         # Return batch of embeddings
         pass
-    
+
     def set_device(self, device: str):
         self.device = device
 ```
@@ -424,11 +511,11 @@ class MyMlflowModel(MlflowModel):
             version=1,
             packages=["torch", "transformers"]
         )
-    
+
     def get_model(self):
         # Return your model instance
         pass
-    
+
     def predict(self, model_input):
         model = self.load_model()
         return model.predict(model_input)
@@ -539,4 +626,4 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 **AmirHossein Advari** - [amiradvari@gmail.com](mailto:amiradvari@gmail.com) \
 **Shirin Dehghani** - [shirin.dehghani1996@gmail.com](mailto:shirin.dehghani1996@gmail.com) \
-**Parsa Mohammadpour** - [parsa.mohammadpour01@gmail.com](mailto:shirin.dehghani1996@gmail.com)
+**Parsa Mohammadpour** - [parsa.mohammadpour01@gmail.com](mailto:parsa.mohammadpour01@gmail.com)

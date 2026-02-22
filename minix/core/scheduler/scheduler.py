@@ -6,8 +6,13 @@ from celery import Celery
 from celery.canvas import Signature
 
 from minix.core.scheduler.task import PeriodicTask, Task
-from minix.core.scheduler.workflow import Workflow, WorkflowError
-from minix.core.scheduler.workflow_tasks import IdentityTask
+from minix.core.scheduler.workflow import Workflow
+from minix.core.scheduler.task.workflow_tasks import (
+    InitContextTask,
+    ExecuteNodeTask,
+    ExtractOneTask,
+    ExtractSinksTask,
+)
 
 
 class SchedulerConfig:
@@ -82,7 +87,11 @@ class Scheduler(Celery):
         self.celery.conf.accept_content = config.get_accept_content()
         self.celery.conf.timezone = config.get_timezone()
 
-        self.celery.register_task(IdentityTask())
+        # Register workflow helper tasks
+        self.celery.register_task(InitContextTask())
+        self.celery.register_task(ExecuteNodeTask())
+        self.celery.register_task(ExtractOneTask())
+        self.celery.register_task(ExtractSinksTask())
 
     def get_app(self):
         return self.celery
@@ -102,12 +111,9 @@ class Scheduler(Celery):
             target_node_id: Optional[str] = None,
             link_error: Optional[Signature] = None,
     ):
-        # chords/joins require result_backend configured
-        if wf.uses_join() and not (self.get_app().conf.result_backend or ''):
-            raise WorkflowError(
-                "Workflow uses join nodes, but Celery result_backend is not configured."
-            )
-
+        # NOTE:
+        # This implementation uses a context-carrying chain and does NOT require chords,
+        # so we no longer block execution if result_backend is empty.
         canvas = wf.to_canvas(app=self.get_app(), target_node_id=target_node_id)
         return canvas.apply_async(link_error=link_error) if link_error else canvas.apply_async()
 
