@@ -1,6 +1,18 @@
-from typing import Self
+from __future__ import annotations
+
+from typing import Optional, Self
+
 from celery import Celery
+from celery.canvas import Signature
+
 from minix.core.scheduler.task import PeriodicTask, Task
+from minix.core.scheduler.workflow import Workflow
+from minix.core.scheduler.task.workflow_tasks import (
+    InitContextTask,
+    ExecuteNodeTask,
+    ExtractOneTask,
+    ExtractSinksTask,
+)
 
 
 class SchedulerConfig:
@@ -75,16 +87,35 @@ class Scheduler(Celery):
         self.celery.conf.accept_content = config.get_accept_content()
         self.celery.conf.timezone = config.get_timezone()
 
+        # Register workflow helper tasks
+        self.celery.register_task(InitContextTask())
+        self.celery.register_task(ExecuteNodeTask())
+        self.celery.register_task(ExtractOneTask())
+        self.celery.register_task(ExtractSinksTask())
+
     def get_app(self):
         return self.celery
 
-
     def run_task(self, task: Task):
-        self.get_app().send_task(
+        # Return AsyncResult so caller can track id
+        return self.get_app().send_task(
             task.get_name(),
             args=task.get_args(),
             kwargs=task.get_kwargs()
         )
+
+    def run_workflow(
+            self,
+            wf: Workflow,
+            *,
+            target_node_id: Optional[str] = None,
+            link_error: Optional[Signature] = None,
+    ):
+        # NOTE:
+        # This implementation uses a context-carrying chain and does NOT require chords,
+        # so we no longer block execution if result_backend is empty.
+        canvas = wf.to_canvas(app=self.get_app(), target_node_id=target_node_id)
+        return canvas.apply_async(link_error=link_error) if link_error else canvas.apply_async()
 
     def register_async_task(self, task: Task):
         self.get_app().register_task(task)
@@ -117,4 +148,3 @@ class Scheduler(Celery):
         }
         app.conf.beat_schedule = beat
         return self
-
