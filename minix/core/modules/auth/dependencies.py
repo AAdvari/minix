@@ -2,8 +2,8 @@ from dataclasses import dataclass
 from typing import List
 from fastapi import HTTPException, Security, Depends, Request
 from fastapi.security import APIKeyHeader
-from minix.core.auth.entities import UserRole
-from minix.core.auth.services import ApiKeyService
+from minix.core.modules.auth.entities import UserRole
+from minix.core.modules.auth.services import ApiKeyService
 from minix.core.registry import Registry
 
 API_KEY_HEADER = APIKeyHeader(name="X-API-Key", scheme_name="ApiKeyAuth", auto_error=False)

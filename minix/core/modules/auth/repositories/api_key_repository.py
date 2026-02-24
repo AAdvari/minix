@@ -2,7 +2,7 @@ import hashlib
 from datetime import datetime
 from typing import List
 from minix.core.repository import SqlRepository
-from minix.core.auth.entities import ApiKeyEntity, UserRole
+from minix.core.modules.auth.entities import ApiKeyEntity, UserRole
 
 
 class ApiKeyRepository(SqlRepository[ApiKeyEntity]):

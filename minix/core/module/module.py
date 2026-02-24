@@ -1,6 +1,5 @@
 from abc import ABC
 from typing import Self, Type, List, Tuple, Dict
-
 from minix.core.consumer import AsyncConsumer
 from minix.core.controller import Controller
 from minix.core.entity import Entity

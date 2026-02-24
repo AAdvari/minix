@@ -1,8 +1,8 @@
 from datetime import datetime
 from typing import List
 from minix.core.service import SqlService
-from minix.core.auth.entities import ApiKeyEntity, UserRole
-from minix.core.auth.repositories import ApiKeyRepository
+from minix.core.modules.auth.entities import ApiKeyEntity, UserRole
+from minix.core.modules.auth.repositories import ApiKeyRepository
 
 
 class ApiKeyService(SqlService[ApiKeyEntity]):
