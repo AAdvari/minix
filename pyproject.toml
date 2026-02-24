@@ -1,6 +1,6 @@
 [project]
 name = "minix"
-version = "0.1.37"
+version = "0.1.38"
 description = "A modular Python framework for backend, AI, and data projects"
 authors = [
     { name = "AmirHossein Advari", email = "amiradvari@gmail.com" }
@@ -27,7 +27,8 @@ build-backend = "poetry.core.masonry.api"
 
 
 [tool.poetry.extras]
-ai = ["torch", "mlflow", "qdrant-client"]
+ai = ["torch", "mlflow"]
+vdb = ["qdrant-client"]
 clickhouse = ["clickhouse-sqlalchemy", "clickhouse-driver"]
 dev = ["typer"]
 
