@@ -1,9 +1,11 @@
 import os
 from typing import Self
 from fastapi import FastAPI
+
+from minix.core.connectors import QdrantConnector
 from minix.core.module import Module
 from minix.core.registry.registry import Registry
-from minix.core.repository import SqlRepository
+from minix.core.repository import SqlRepository, QdrantRepository
 from minix.core.repository import RedisRepository
 from minix.core.scheduler import Scheduler
 from minix.core.connectors.sql_connector import SqlConnector
@@ -30,11 +32,12 @@ class BusinessModule(Module):
     def install_repositories(self, repositories)-> Self:
         for idx, repo_salt_tuple in enumerate(repositories):
             repository, salt = repo_salt_tuple
-            if salt is not None:
-                sql_connector = Registry().get(SqlConnector, salt=salt)
-            else:
-                sql_connector = Registry().get(SqlConnector)
+
             if issubclass(repository, SqlRepository):
+                if salt is not None:
+                    sql_connector = Registry().get(SqlConnector, salt=salt)
+                else:
+                    sql_connector = Registry().get(SqlConnector)
                 Registry().register(
                     repository,
                     repository(self.entities[idx], sql_connector)
@@ -42,12 +45,27 @@ class BusinessModule(Module):
 
             elif issubclass(repository, RedisRepository):
                 from redis import Redis
-                redis = Registry().get(Redis)
+                if salt is not None:
+                    redis = Registry().get(Redis, salt=salt)
+                else:
+                    redis = Registry().get(Redis)
                 Registry().register(
                     repository,
                     repository(
                         self.entities[idx],
                         redis
+                    )
+                )
+            elif issubclass(repository, QdrantRepository):
+                if salt is not None:
+                    qdrant_connector = Registry().get(QdrantConnector, salt=salt)
+                else:
+                    qdrant_connector = Registry().get(QdrantConnector)
+                Registry().register(
+                    repository,
+                    repository(
+                        self.entities[idx],
+                        qdrant_connector
                     )
                 )
         return self
