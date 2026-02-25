@@ -3,12 +3,12 @@ from typing import Self
 from fastapi import FastAPI
 
 from minix.core.connectors import QdrantConnector
+from minix.core.connectors import SqlConnector
 from minix.core.module import Module
 from minix.core.registry.registry import Registry
 from minix.core.repository import SqlRepository, QdrantRepository
 from minix.core.repository import RedisRepository
 from minix.core.scheduler import Scheduler
-from minix.core.connectors.sql_connector import SqlConnector
 
 
 class BusinessModule(Module):
