@@ -24,12 +24,12 @@ class Controller:
         route_roles = getattr(func, '_protected_roles', None)
         
         if route_roles:
-            from minix.core.auth.dependencies import RoleChecker
+            from minix.core.modules.auth.dependencies import RoleChecker
             return [Depends(RoleChecker(route_roles))]
         
         controller_roles = getattr(self.__class__, '_controller_protected_roles', None)
         if controller_roles:
-            from minix.core.auth.dependencies import RoleChecker
+            from minix.core.modules.auth.dependencies import RoleChecker
             return [Depends(RoleChecker(controller_roles))]
         
         return []
