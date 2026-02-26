@@ -17,14 +17,16 @@ class QdrantRepository(Repository[T], ABC):
         super().__init__(entity)
         self.entity = entity
         self.connector = qdrant_connector
-        ## check if collection exists, if not create it
         if qdrant_connector.client is None:
             self.connector.connect()
         self.client = self.connector.client
-        collections = self.client.get_collections().collections
+
+
+    async def create_collection(self):
+        collections = (await self.client.get_collections()).collections
         collection_names = [collection.name for collection in collections]
         if not self.entity.collection() in collection_names:
-            self.client.create_collection(
+            await self.client.create_collection(
                 collection_name=self.entity.collection(),
                 vectors_config={
                     "size": self.get_vector_size(),
@@ -63,7 +65,6 @@ class QdrantRepository(Repository[T], ABC):
             with_vectors=with_vector,
             score_threshold=threshold
         )
-        print(results)
         return [self.entity(content=result.payload['content'], id=result.id, vector=None,
                             created_at=result.payload['created_at']) for result in results]
 

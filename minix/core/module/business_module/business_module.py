@@ -1,3 +1,4 @@
+import asyncio
 import os
 from typing import Self
 from fastapi import FastAPI
@@ -61,12 +62,14 @@ class BusinessModule(Module):
                     qdrant_connector = Registry().get(QdrantConnector, salt=salt)
                 else:
                     qdrant_connector = Registry().get(QdrantConnector)
-                Registry().register(
-                    repository,
-                    repository(
+                repo = repository(
                         self.entities[idx],
                         qdrant_connector
                     )
+                asyncio.run(repo.create_collection())
+                Registry().register(
+                    repository,
+                    repo
                 )
         return self
 
