@@ -1,4 +1,5 @@
 import os
+from abc import abstractmethod, ABC
 from typing import TypeVar, Type, List, Dict, Any, Coroutine
 import numpy as np
 from qdrant_client.models import PointStruct
@@ -9,12 +10,14 @@ from minix.core.repository import Repository
 T = TypeVar('T', bound=QdrantEntity)
 
 
-class QdrantRepository(Repository[T]):
+class QdrantRepository(Repository[T], ABC):
 
     def __init__(self, entity: Type[T], qdrant_connector: QdrantConnector):
         super().__init__(entity)
         self.entity = entity
         self.connector = qdrant_connector
+        if self.connector.client is None:
+            self.connector.connect()
         self.client = self.connector.client
         ## check if collection exists, if not create it
         collections = self.client.get_collections().collections
@@ -23,10 +26,17 @@ class QdrantRepository(Repository[T]):
             self.client.create_collection(
                 collection_name=self.entity.collection(),
                 vectors_config={
-                    "size": int(os.getenv("VECTOR_SIZE", 1536)),
-                    "distance": "Cosine"
+                    "size": self.get_vector_size(),
+                    "distance": self.get_distance()
                 }
             )
+
+    @abstractmethod
+    def get_vector_size(self) -> int:
+        raise NotImplementedError("Subclasses must implement this method.")
+
+    def get_distance(self) -> str:
+        return 'Cosine'
 
     async def insert(self, entities: List[T]) -> None:
         points = [
