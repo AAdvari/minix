@@ -3,7 +3,7 @@ from typing import TypeVar, Type, List, Dict, Any, Coroutine
 import numpy as np
 from qdrant_client.models import PointStruct
 from minix.core.entity import QdrantEntity
-from minix.core.qdrant_connector import QdrantConnector
+from minix.core.connectors.qdrant_connector import QdrantConnector
 from minix.core.repository import Repository
 
 T = TypeVar('T', bound=QdrantEntity)
