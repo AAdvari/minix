@@ -67,9 +67,12 @@ class BusinessModule(Module):
                         qdrant_connector
                     )
                 try:
-                    loop = asyncio.get_event_loop()
+                    loop = asyncio.get_running_loop()
+                    print("1")
                     loop.run_until_complete(repo.create_collection())
-                except RuntimeError:
+                    print("2")
+                except RuntimeError as e:
+                    print("exceptionn:", e)
                     asyncio.run(repo.create_collection())
 
                 Registry().register(
