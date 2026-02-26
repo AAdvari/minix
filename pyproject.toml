@@ -1,6 +1,6 @@
 [project]
 name = "minix"
-version = "0.1.50"
+version = "0.1.51"
 description = "A modular Python framework for backend, AI, and data projects"
 authors = [
     { name = "AmirHossein Advari", email = "amiradvari@gmail.com" }
@@ -20,6 +20,9 @@ dependencies = [
     "celery-redbeat (>= 2.3.2)",
 ]
 
+
+[tool.poetry.dependencies]
+qdrant-client = { version = ">=1.0.0,<2.0.0", optional = true }
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

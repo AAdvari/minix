@@ -21,7 +21,7 @@ class QdrantRepository(Repository[T], ABC):
         if qdrant_connector.client is None:
             self.connector.connect()
         self.client = self.connector.client
-        collections = asyncio.run(self.client.get_collections()).collections
+        collections = self.client.get_collections().collections
         collection_names = [collection.name for collection in collections]
         if not self.entity.collection() in collection_names:
             self.client.create_collection(
