@@ -68,12 +68,8 @@ class BusinessModule(Module):
                     )
                 try:
                     loop = asyncio.get_running_loop()
-                    print("1")
                     asyncio.run_coroutine_threadsafe(repo.create_collection(), loop)
-                    # loop.run_until_complete(repo.create_collection())
-                    print("2")
                 except RuntimeError as e:
-                    print("exceptionn:", e)
                     asyncio.run(repo.create_collection())
 
                 Registry().register(
