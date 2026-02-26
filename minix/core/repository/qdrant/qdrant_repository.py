@@ -2,9 +2,9 @@ import os
 from typing import TypeVar, Type, List, Dict, Any, Coroutine
 import numpy as np
 from qdrant_client.models import PointStruct
-from src.core.entity import QdrantEntity
-from src.core.qdrant_connector import QdrantConnector
-from src.core.repository import Repository
+from minix.core.entity import QdrantEntity
+from minix.core.qdrant_connector import QdrantConnector
+from minix.core.repository import Repository
 
 T = TypeVar('T', bound=QdrantEntity)
 
