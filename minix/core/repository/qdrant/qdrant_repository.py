@@ -16,10 +16,10 @@ class QdrantRepository(Repository[T], ABC):
         super().__init__(entity)
         self.entity = entity
         self.connector = qdrant_connector
-        self.client = self.connector.client
         ## check if collection exists, if not create it
         if qdrant_connector.client is None:
             self.connector.connect()
+        self.client = self.connector.client
         collections = self.client.get_collections().collections
         collection_names = [collection.name for collection in collections]
         if not self.entity.collection() in collection_names:
