@@ -16,8 +16,6 @@ class QdrantRepository(Repository[T], ABC):
         super().__init__(entity)
         self.entity = entity
         self.connector = qdrant_connector
-        if self.connector.client is None:
-            self.connector.connect()
         self.client = self.connector.client
         ## check if collection exists, if not create it
         collections = self.client.get_collections().collections

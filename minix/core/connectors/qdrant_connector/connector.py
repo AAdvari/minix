@@ -9,12 +9,12 @@ class QdrantConnector(Connector):
         self.api_key = api_key
         self.client = None
 
-    async def connect(self) -> None:
+    def connect(self) -> None:
         self.client = AsyncQdrantClient(url=self.url, api_key=self.api_key)
 
-    async def disconnect(self) -> None:
+    def disconnect(self) -> None:
         # qdrant-client doesn't need explicit disconnect, but close can be added for compatibility
         self.client = None
 
-    async def is_connected(self) -> bool:
+    def is_connected(self) -> bool:
         return self.client is not None
