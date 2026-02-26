@@ -66,7 +66,12 @@ class BusinessModule(Module):
                         self.entities[idx],
                         qdrant_connector
                     )
-                asyncio.run(repo.create_collection())
+                try:
+                    loop = asyncio.get_event_loop()
+                    loop.run_until_complete(repo.create_collection())
+                except RuntimeError:
+                    asyncio.run(repo.create_collection())
+
                 Registry().register(
                     repository,
                     repo
