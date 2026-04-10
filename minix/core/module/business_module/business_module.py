@@ -1,13 +1,16 @@
 import asyncio
+import importlib.util
 import os
 from typing import Self
 from fastapi import FastAPI
 
-from minix.core.connectors import QdrantConnector
+if importlib.util.find_spec('qdrant_client'):
+    from minix.core.connectors import QdrantConnector
+    from minix.core.repository import QdrantRepository
 from minix.core.connectors import SqlConnector
 from minix.core.module import Module
 from minix.core.registry.registry import Registry
-from minix.core.repository import SqlRepository, QdrantRepository
+from minix.core.repository import SqlRepository
 from minix.core.repository import RedisRepository
 from minix.core.scheduler import Scheduler
 
@@ -57,7 +60,7 @@ class BusinessModule(Module):
                         redis
                     )
                 )
-            elif issubclass(repository, QdrantRepository):
+            elif importlib.util.find_spec('qdrant_client') and issubclass(repository, QdrantRepository):
                 if salt is not None:
                     qdrant_connector = Registry().get(QdrantConnector, salt=salt)
                 else:
