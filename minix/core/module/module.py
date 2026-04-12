@@ -7,7 +7,7 @@ from minix.core.install import Installable
 from minix.core.model import Model
 from minix.core.repository import Repository
 from minix.core.scheduler.task import PeriodicTask, Task
-from minix.core.service import Service, BaseService
+from minix.core.service import Service, BaseService, HelperService
 
 
 class Module(Installable, ABC):
@@ -35,6 +35,10 @@ class Module(Installable, ABC):
 
     def add_service(self, service: Type[Service])-> Self:
         self.services.append(service)
+        return self
+
+    def add_helper_service(self, service: Type[HelperService])-> Self:
+        self.helper_services.append(service)
         return self
 
     def add_repository(self, repository: Type[Repository], connector_salt: str | None = None)-> Self:
