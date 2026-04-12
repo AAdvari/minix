@@ -1,10 +1,10 @@
 from typing import Generic, TypeVar
 from minix.core.entity import Entity
 from minix.core.repository import Repository
-
+from minix.core.service import BaseService
 
 T = TypeVar('T', bound=Entity)
-class Service(Generic[T]):
+class Service(Generic[T], BaseService):
     def __init__(self, repository: Repository[T]):
         self.repository = repository
 

@@ -7,7 +7,7 @@ from minix.core.install import Installable
 from minix.core.model import Model
 from minix.core.repository import Repository
 from minix.core.scheduler.task import PeriodicTask, Task
-from minix.core.service import Service
+from minix.core.service import Service, BaseService
 
 
 class Module(Installable, ABC):
@@ -17,6 +17,7 @@ class Module(Installable, ABC):
         self.name = name
         self.entities: List[Type[Entity]] = []
         self.services: List[Type[Service]] = []
+        self.helper_services: List[Type[BaseService]] = []
         self.repositories: List[Tuple[Type[Repository], str | None]] = []
         self.periodic_tasks : List[Type[PeriodicTask]] = []
         self.tasks: List[Type[Task]] = []
