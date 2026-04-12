@@ -88,6 +88,15 @@ class BusinessModule(Module):
                 service,
                 service(Registry().get(self.repositories[idx][0]))
             )
+
+        return self
+
+    def install_helper_services(self, services)-> Self:
+        for service in services:
+            Registry().register(
+                service,
+                service()
+            )
         return self
 
     def install_periodic_tasks(self, periodic_tasks)-> Self:
