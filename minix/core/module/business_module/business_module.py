@@ -23,6 +23,7 @@ class BusinessModule(Module):
             self.install_entities(self.entities)
             self.install_repositories(self.repositories)
             self.install_services(self.services)
+            self.install_helper_services(self.helper_services)
             self.install_periodic_tasks(self.periodic_tasks)
             self.install_tasks(self.tasks)
             self.install_controllers(self.controllers)
