@@ -25,7 +25,29 @@ class Module(Installable, ABC):
         self.models: List[Tuple[Type[Model], Dict]] = []
         self.consumers: List[Type[AsyncConsumer]] = []
 
+    def add_binding(
+        self,
+        entity: Type[Entity],
+        repository: Type[Repository],
+        service: Type[Service],
+        connector_salt: str | None = None,
+    ) -> Self:
+        """Register an entity, repository, and service as one binding.
+
+        Prefer this over calling ``add_entity``, ``add_repository``, and
+        ``add_service`` separately so their order cannot drift.
+        """
+        self.entities.append(entity)
+        self.repositories.append((repository, connector_salt))
+        self.services.append(service)
+        return self
+
     def add_entity(self, entity: Type[Entity])-> Self:
+        """Register a data entity.
+
+        Deprecated: prefer :meth:`add_binding` to register entity, repository,
+        and service together so they stay paired by design.
+        """
         self.entities.append(entity)
         return self
 
@@ -34,6 +56,11 @@ class Module(Installable, ABC):
         return self
 
     def add_service(self, service: Type[Service])-> Self:
+        """Register a service.
+
+        Deprecated: prefer :meth:`add_binding` to register entity, repository,
+        and service together so they stay paired by design.
+        """
         self.services.append(service)
         return self
 
@@ -42,6 +69,11 @@ class Module(Installable, ABC):
         return self
 
     def add_repository(self, repository: Type[Repository], connector_salt: str | None = None)-> Self:
+        """Register a repository with an optional connector salt.
+
+        Deprecated: prefer :meth:`add_binding` to register entity, repository,
+        and service together so they stay paired by design.
+        """
         self.repositories.append((repository, connector_salt))
         return self
 
