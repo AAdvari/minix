@@ -5,9 +5,7 @@ from minix.core.modules.auth.services import ApiKeyService
 
 AuthModule = (
     BusinessModule('auth_module')
-        .add_entity(ApiKeyEntity)
-        .add_repository(ApiKeyRepository)
-        .add_service(ApiKeyService)
+        .add_binding(ApiKeyEntity, ApiKeyRepository, ApiKeyService)
     )
 
 

@@ -126,18 +126,17 @@ from minix.core.module.business_module import BusinessModule
 class ProductModule(BusinessModule):
     def __init__(self):
         super().__init__("product")
-        self.add_entity(ProductEntity)
-        self.add_repository(ProductRepository)
-        self.add_service(ProductService)
+        self.add_binding(ProductEntity, ProductRepository, ProductService)
         self.add_controller(ProductController)
         self.add_periodic_task(SyncProductsTask)
         self.add_consumer(ProductEventConsumer)
 ```
 
 **Module Methods:**
-- `add_entity(entity)` - Register a data entity
-- `add_repository(repository, connector_salt)` - Register a repository with optional connector
-- `add_service(service)` - Register a service
+- `add_binding(entity, repository, service, connector_salt=None)` - Register a paired entity / repository / service (preferred)
+- `add_entity(entity)` - Register a data entity (**deprecated**, use `add_binding`)
+- `add_repository(repository, connector_salt)` - Register a repository with optional connector (**deprecated**, use `add_binding`)
+- `add_service(service)` - Register a service (**deprecated**, use `add_binding`)
 - `add_controller(controller)` - Register an API controller
 - `add_task(task)` - Register an async task
 - `add_periodic_task(periodic_task)` - Register a scheduled task

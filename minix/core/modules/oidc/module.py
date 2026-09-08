@@ -10,9 +10,7 @@ from minix.core.modules.oidc.controllers import OidcController
 # Depends on the `auth` module for the shared AuthProvider/AuthContext/UserRole.
 OidcModule = (
     BusinessModule('oidc_module')
-        .add_entity(OidcUserEntity)
-        .add_repository(OidcUserRepository)
-        .add_service(OidcUserService)
+        .add_binding(OidcUserEntity, OidcUserRepository, OidcUserService)
         .add_helper_service(OidcDiscovery)
         .add_controller(OidcController)
     )
