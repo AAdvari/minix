@@ -1,6 +1,5 @@
 import asyncio
 import importlib.util
-import os
 from typing import Self
 from fastapi import FastAPI
 
@@ -8,6 +7,7 @@ if importlib.util.find_spec('qdrant_client'):
     from minix.core.connectors import QdrantConnector
     from minix.core.repository import QdrantRepository
 from minix.core.connectors import SqlConnector
+from minix.core.conf.builders import kafka_bootstrap_servers
 from minix.core.module import Module
 from minix.core.registry.registry import Registry
 from minix.core.repository import SqlRepository
@@ -137,10 +137,13 @@ class BusinessModule(Module):
             consumer_obj = consumer()
             config = consumer_obj.get_config()
             if config.bootstrap_servers is None:
-                bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS")
-                if bootstrap_servers is None:
-                    raise ValueError("Bootstrap servers must be provided either in the config or as an environment variable")
-                config.bootstrap_servers = [server.strip() for server in bootstrap_servers.split(",")]
+                servers = kafka_bootstrap_servers()
+                if not servers:
+                    raise ValueError(
+                        "Bootstrap servers must be provided either in the consumer "
+                        "config or via KAFKA_BOOTSTRAP_SERVERS / settings"
+                    )
+                config.bootstrap_servers = servers
             consumer_obj.set_config(config)
             api = Registry().get(FastAPI)
             api.add_event_handler(

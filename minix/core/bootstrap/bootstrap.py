@@ -7,11 +7,11 @@ from minix.core.module import Module
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from minix.core.registry import Registry
-from minix.core.scheduler import SchedulerConfig, Scheduler
+from minix.core.scheduler import Scheduler
+from minix.core.conf import settings
+from minix.core.conf.builders import scheduler_config
+
 pymysql.install_as_MySQLdb()
-import os
-import dotenv
-dotenv.load_dotenv()
 
 
 def register_connectors(connectors: list[Tuple[Connector, str | None]]):
@@ -22,17 +22,10 @@ def register_connectors(connectors: list[Tuple[Connector, str | None]]):
             Registry().register(connector.__class__, connector)
 
 def register_scheduler():
-    Registry().register(Scheduler, Scheduler(
-        SchedulerConfig()
-        .set_broker_url(os.getenv('CELERY_BROKER_URL'))
-        .set_result_backend(os.getenv('CELERY_RESULT_BACKEND'))
-        .set_task_serializer('json')
-        .set_result_serializer('json')
-        .set_accept_content(['json'])
-        .set_timezone('GMT')
-    ))
+    Registry().register(Scheduler, Scheduler(scheduler_config(settings)))
+
 def register_fast_api():
-    app = FastAPI()
+    app = FastAPI(title=getattr(settings, "APP_NAME", "minix"))
     # Allow CORS for localhost-related origins and local network IPs.
     app.add_middleware(
         CORSMiddleware,
@@ -80,5 +73,3 @@ def bootstrap(
         register_connectors(connectors)
     if modules:
         register_modules(modules)
-
-

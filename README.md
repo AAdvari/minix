@@ -49,7 +49,7 @@
 - **Object Storage**: S3-compatible storage support via `boto3`
 - **ML Workflows**: Optional MLflow integration for model versioning and deployment
 - **Dependency Registry**: Singleton-based service container for clean dependency injection
-- **Environment Management**: Configuration via `.env` files using `dotenv`
+- **Environment Management**: `settings.py` with env-backed defaults and `.env` support
 
 ---
 
@@ -524,19 +524,54 @@ class MyMlflowModel(MlflowModel):
 
 ## Configuration
 
-Minix uses environment variables for configuration. Create a `.env` file in your project root:
+Minix uses a project **settings** module. Every setting is read from the
+environment (or `.env`) and falls back to a documented default.
+
+### Project settings
+
+```bash
+minix init my_project
+```
+
+This creates `settings.py`, `.env`, and `.env.example` in the current
+directory. The name argument sets `APP_NAME`. `.env` includes
+`MINIX_SETTINGS_MODULE=settings`, so the project settings module is loaded
+automatically (no manual `export` needed).
+
+```python
+from minix.core.conf import settings
+
+print(settings.DB_HOST)
+print(settings.CELERY_BROKER_URL)
+```
+
+When no project `settings` module is found, framework defaults from
+`minix.core.conf.global_settings` are used. Override the module path with
+`MINIX_SETTINGS_MODULE` if needed.
+
+### Connector helpers
+
+```python
+from minix.core.connectors import SqlConnector
+from minix.core.object_storage import ObjectStorageConnector
+from minix.core.conf.builders import sql_connector_config, object_storage_config
+
+connectors = [
+    (SqlConnector(sql_connector_config()), None),
+    (ObjectStorageConnector(object_storage_config()), None),
+]
+```
+
+### Environment overrides
+
+Any key in `.env` overrides the default in `settings.py`:
 
 ```env
-# Celery Configuration
+DB_HOST=localhost
+DB_DATABASE=myapp
 CELERY_BROKER_URL=redis://localhost:6379/0
-CELERY_RESULT_BACKEND=db+mysql://root:password@localhost:3306/celery_results
-
-# Kafka Configuration
 KAFKA_BOOTSTRAP_SERVERS=localhost:9092
-
-# MLflow Configuration (for AI extras)
 MLFLOW_TRACKING_URL=http://localhost:5000
-PYTHON_VERSION=3.10
 ```
 
 ---
@@ -559,18 +594,10 @@ Install with ClickHouse support:
 pip install "minix[clickhouse]"
 ```
 
-### Development Tools
-
-Install development dependencies:
-
-```bash
-pip install "minix[dev]"
-```
-
 ### Install All Extras
 
 ```bash
-pip install "minix[ai,clickhouse,dev]"
+pip install "minix[ai,vdb,clickhouse]"
 ```
 
 ---
@@ -599,12 +626,52 @@ connector = Registry().get(SqlConnector, salt="analytics")
 
 ## CLI Commands
 
-```bash
-# Initialize a new project
-minix init <project_name>
+Install Minix, then use the `minix` entry point:
 
-# Show framework version
-minix version
+```bash
+minix --help
+minix <command> --help
+```
+
+### Global options
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--version` | `-v` | Print the installed Minix version and exit |
+| `--help` | | Show CLI help |
+
+```bash
+minix -v
+minix --version
+```
+
+### `minix init`
+
+Scaffold a project in the **current directory**.
+
+```bash
+minix init [APP_NAME]
+```
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `APP_NAME` | `my_project` | Written to `APP_NAME` in `settings.py`, `.env`, and `.env.example` |
+
+**Creates:**
+
+| File | Purpose |
+|------|---------|
+| `settings.py` | Project settings (env-backed defaults) |
+| `.env.example` | Documented env keys (commit this) |
+| `.env` | Local overrides (gitignored) |
+| `.gitignore` | Python / IDE / dotenv ignores |
+
+**Behavior:**
+
+- Fails with exit code `1` if `settings.py` already exists.
+
+```bash
+minix init my_app
 ```
 
 ---
