@@ -1,6 +1,6 @@
 [project]
 name = "minix"
-version = "0.2.1"
+version = "0.3.0"
 description = "A modular Python framework for backend, AI, and data projects"
 authors = [
     { name = "AmirHossein Advari", email = "amiradvari@gmail.com" }
@@ -37,10 +37,38 @@ clickhouse = [
 dev = [
     "typer>=0.12",
 ]
+# The RAG module (minix.core.modules.rag): collections, ingestion, chunking,
+# hybrid BM25 + vector retrieval, LLM reranking, answers with citations.
+# Everything it needs ships in this one extra: pip install "minix[rag]".
+# Models are called through LiteLLM, so any provider it supports works — set the
+# provider's API key. At runtime it also needs a PostgreSQL server (full-text
+# keyword search) and a Qdrant server (vectors); PDF ingestion needs the poppler
+# system package (used by pdf2image).
+rag = [
+    "langchain-core>=0.3.0",
+    "langchain-text-splitters>=0.3.0",
+    "litellm>=1.40.0",
+    "langchain-litellm>=0.6.0",
+    "langchain-qdrant>=0.2.0",
+    "qdrant-client>=1.12.0",
+    "pdf2image>=1.17.0",
+    "Pillow>=10.0.0",
+    "python-multipart>=0.0.9",
+    "psycopg2-binary>=2.9.0",
+]
+# PostgreSQL driver for SqlConnector(driver="postgresql") — also included in
+# `rag`, which is Postgres-only.
+postgres = [
+    "psycopg2-binary>=2.9.0",
+]
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+
+[tool.poetry]
+packages = [{ include = "minix" }]
 
 
 [tool.poetry.scripts]

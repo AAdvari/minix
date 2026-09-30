@@ -31,8 +31,12 @@ def register_scheduler():
         .set_accept_content(['json'])
         .set_timezone('GMT')
     ))
-def register_fast_api():
+def register_fast_api(default_cors: bool = True):
     app = FastAPI()
+    if not default_cors:
+        # The application installs its own CORS policy.
+        Registry().register(FastAPI, app)
+        return
     # Allow CORS for localhost-related origins and local network IPs.
     app.add_middleware(
         CORSMiddleware,
@@ -52,7 +56,7 @@ def register_fast_api():
         allow_credentials=False,
     )
     Registry().register(FastAPI, app)
-def register_modules(modules: list[Module]):
+def register_modules(modules: list[Module], default_cors: bool = True):
     fast_api = False
     scheduler = False
     for module in modules:
@@ -64,7 +68,7 @@ def register_modules(modules: list[Module]):
             scheduler = True
 
     if fast_api:
-        register_fast_api()
+        register_fast_api(default_cors)
     if scheduler:
         register_scheduler()
     for module in modules:
@@ -73,12 +77,17 @@ def register_modules(modules: list[Module]):
 
 def bootstrap(
         modules: list[Module] = None,
-        connectors: list[Tuple[Connector, str | None]] = None
+        connectors: list[Tuple[Connector, str | None]] = None,
+        default_cors: bool = True,
 ):
+    """Register connectors, then install modules.
 
+    `default_cors=False` skips the built-in localhost / private-network CORS
+    policy, for an application that installs its own `CORSMiddleware`.
+    """
     if connectors:
         register_connectors(connectors)
     if modules:
-        register_modules(modules)
+        register_modules(modules, default_cors)
 
 

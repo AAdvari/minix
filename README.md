@@ -4,7 +4,7 @@
 **Minix** is a modular Python framework for building backend, AI, and data-driven applications. It provides a clean, layered architecture with built-in support for REST APIs, task scheduling, message queues, and machine learning workflows.
 
 ![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)
-![Version](https://img.shields.io/badge/version-0.1.32-green.svg)
+![Version](https://img.shields.io/badge/version-0.3.0-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey.svg)
 
 ---
@@ -29,6 +29,7 @@
     - [Workflows (DAG Scheduling)](#workflows-dag-scheduling)
   - [Kafka Consumers](#kafka-consumers)
   - [ML Models](#ml-models)
+- [RAG Module](#rag-module)
 - [Configuration](#configuration)
 - [Extras](#extras)
 - [Registry Usage](#registry-usage)
@@ -48,6 +49,7 @@
 - **Kafka Consumers**: Async Kafka message processing with `aiokafka`
 - **Object Storage**: S3-compatible storage support via `boto3`
 - **ML Workflows**: Optional MLflow integration for model versioning and deployment
+- **RAG Module**: Pluggable retrieval-augmented generation — collections, document ingestion, chunking, hybrid BM25 + vector retrieval, LLM reranking, and answers with citations
 - **Dependency Registry**: Singleton-based service container for clean dependency injection
 - **Environment Management**: Configuration via `.env` files using `dotenv`
 
@@ -133,15 +135,33 @@ class ProductModule(BusinessModule):
 ```
 
 **Module Methods:**
-- `add_binding(entity, repository, service, connector_salt=None)` - Register a paired entity / repository / service (preferred)
+- `add_binding(entity, repository, service, connector_salt=None, *, provides_repository=None, provides_service=None)` - Register a paired entity / repository / service (preferred)
 - `add_entity(entity)` - Register a data entity (**deprecated**, use `add_binding`)
-- `add_repository(repository, connector_salt)` - Register a repository with optional connector (**deprecated**, use `add_binding`)
-- `add_service(service)` - Register a service (**deprecated**, use `add_binding`)
-- `add_controller(controller)` - Register an API controller
+- `add_repository(repository, connector_salt, provides=None)` - Register a repository with optional connector (**deprecated**, use `add_binding`)
+- `add_service(service, provides=None)` - Register a service (**deprecated**, use `add_binding`)
+- `add_helper_service(service)` - Register a stand-alone helper service (no repository)
+- `add_controller(controller, provides=None)` - Register an API controller
 - `add_task(task)` - Register an async task
 - `add_periodic_task(periodic_task)` - Register a scheduled task
 - `add_consumer(consumer)` - Register a Kafka consumer
 - `add_model(model, config)` - Register an ML model
+
+**Swapping in a subclass (`provides`)**: `provides=Base` also registers the
+installed instance under `Base`, so every `Registry().get(Base)` lookup —
+including the framework's own — resolves to your subclass. This is how you
+extend a built-in module (e.g. the RAG module below) without editing it:
+
+```python
+from minix.core.modules.rag.controllers import RagController
+from minix.core.modules.rag.services import RagCollectionService
+
+module = (
+    BusinessModule("my_rag")
+    .add_binding(MyCollectionEntity, MyCollectionRepository, MyCollectionService,
+                 provides_service=RagCollectionService)
+    .add_controller(MyRagController, provides=RagController)
+)
+```
 
 ### Entities
 
@@ -522,6 +542,146 @@ class MyMlflowModel(MlflowModel):
 
 ---
 
+## RAG Module
+
+`minix.core.modules.rag` is a ready-made retrieval-augmented generation module:
+a REST API over named **collections** of documents, with async ingestion, hybrid
+retrieval and LLM answers that cite their sources.
+
+**What it does**
+
+- **Ingestion** — upload a file (`POST /rag/ingest/upload`: PDF or images read
+  by a vision model, or text formats) or post raw text (`POST /rag/ingest/text`).
+  Ingestion runs in the background and returns a `job_id` to poll.
+- **Chunking** — per-collection strategy: `smart`, `fixed`, `by_heading`,
+  `by_clause`, `qa`, `sentence` or `llm` (instruction-driven).
+  `GET /rag/chunking/strategies` returns UI labels for each.
+- **Metadata extraction** — the LLM detects the document type and extracts
+  typed metadata, stored in PostgreSQL and on every vector payload.
+- **Hybrid retrieval** — PostgreSQL full-text search (`tsvector`) plus Qdrant
+  cosine vectors, fused (weighted or RRF) and filtered by a relevance floor.
+- **LLM reranking** — optional reranker that re-orders the retrieved chunks
+  before the answer prompt (per request, or server default).
+- **Answers with citations** — `POST /rag/query` (async, poll by `query_id`),
+  single collection or an explicit multi-collection allowlist. Every response
+  carries the retrieved and selected chunks and a refusal classification
+  (`out_of_corpus`, `out_of_scope`, `policy_violation`, `ambiguous`). Retrieved
+  text is fenced as untrusted data in the prompt.
+- **Search without an LLM** — `POST /rag/search` (hybrid / vector / keyword).
+- **Multi-query match** — `POST /rag/match` blends several weighted queries into
+  one document ranking (synchronous).
+- **Management** — collections, documents, chunks, jobs, `GET /rag/health`,
+  `GET /rag/me`.
+
+**Install** — the module is optional; a plain `pip install minix` does not pull
+in any of its dependencies:
+
+```bash
+pip install "minix[rag]"
+```
+
+At runtime it also needs a PostgreSQL server (keyword search + metadata) and a
+Qdrant server (vectors); PDF ingestion needs the `poppler` system package.
+Importing `minix.core.modules.rag` without the extra raises an `ImportError`
+that tells you the command above.
+
+**Mount it**
+
+```python
+import os
+from fastapi import FastAPI
+from minix.core.bootstrap import bootstrap
+from minix.core.connectors import SqlConnector, SqlConnectorConfig
+from minix.core.entity.sql_entity import Base
+from minix.core.modules.auth import AuthModule
+from minix.core.modules.rag import RagModule
+from minix.core.registry import Registry
+
+pg = SqlConnector(SqlConnectorConfig(
+    username="rag", password="rag", host="localhost", port=5432,
+    database="rag", driver="postgresql",
+))
+Base.metadata.create_all(pg.get_engine())   # or manage the schema with Alembic
+
+# Qdrant: set QDRANT_URL (and QDRANT_API_KEY), or register a QdrantConnector
+# alongside the SQL connector and the RAG module will use its URL / key:
+#   connectors=[(pg, None), (QdrantConnector("http://localhost:6333"), None)]
+bootstrap(modules=[AuthModule, RagModule], connectors=[(pg, None)])
+app = Registry().get(FastAPI)   # uvicorn main:app
+```
+
+`AuthModule` provides the API keys the RAG routes accept (`X-API-Key`). With
+`RAG_ACCESS_CONTROL_ENABLED=false` (the default) requests without a key run as
+an anonymous admin; set it to `true` to require a key and enforce the key's role
+(`readonly` may read and query, `user` may also ingest and edit, `admin` may
+also delete collections).
+
+**Configuration** (environment variables, read by `minix.core.modules.rag.config.RagConfig`)
+
+| Variable | Default | Purpose |
+|---|---|---|
+| provider API key | — | The standard variable for the provider you use (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `AZURE_API_KEY`, …) — LiteLLM reads it |
+| `LLM_MODEL` | `gpt-4o` | Answers, reranking (any LiteLLM model name) |
+| `LLM_TEMPERATURE` | unset | Passed to the model only when set |
+| `RAG_LLM_TIMEOUT_SECONDS` / `RAG_LLM_MAX_TOKENS` | `60` / `2048` | LLM call bounds |
+| `EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding model (any LiteLLM embedding model) |
+| `EMBEDDING_DIMENSION` | `1536` | Vector size of the Qdrant collections — must equal what the model returns |
+| `RAG_EMBEDDING_SEND_DIMENSIONS` | `true` | Also send it as the `dimensions` parameter; `false` for fixed-size models that reject it |
+| `DOCUMENT_PROCESSOR_MODEL` | `gpt-4o` | PDF / image transcription, metadata extraction, LLM chunking (vision-capable) |
+| `QDRANT_URL` / `QDRANT_API_KEY` | `http://localhost:6333` / — | Vector store (a registered `QdrantConnector` takes precedence) |
+| `CHUNK_SIZE` / `CHUNK_OVERLAP` | `800` / `100` | Default chunking |
+| `TOP_K` | `5` | Default retrieval depth |
+| `BM25_WEIGHT` / `VECTOR_WEIGHT` | `0.3` / `0.7` | Hybrid fusion weights |
+| `MIN_RELEVANCE_SCORE` | `0.3` | Relevance floor before the answer prompt |
+| `RAG_BM25_QUERY_MODE` | `plainto` | `or` suits long natural-language queries |
+| `RAG_RETRIEVAL_FETCH_MULTIPLIER` / `RAG_RETRIEVAL_CANDIDATE_FLOOR` | `6` / `50` | Candidate pool per retrieval leg |
+| `LLM_SELECTOR_ENABLED` | `true` | LLM reranker on `/query` by default |
+| `SELECTOR_FALLBACK_TOP_N` | `5` | Chunks handed to the answer prompt |
+| `RAG_RERANKER_MODEL` / `RAG_RERANKER_MIN_SCORE` / `RAG_RERANKER_MAX_CHARS` | `LLM_MODEL` / `5` / `1200` | Reranker tuning |
+| `RAG_INGEST_IDENTITY_ENRICHMENT` | `false` | Prefix chunks with a title / parties header |
+| `DEFAULT_COLLECTION` | `default` | Collection used when a request names none |
+| `RAG_ACCESS_CONTROL_ENABLED` | `false` | Require an API key and enforce roles |
+
+**How it fits the framework** — it is a regular module: `RagModule` is a
+`BusinessModule` built from one `add_binding(entity, repository, service)` per
+table (collections, documents, chunks, jobs, search requests, query requests)
+plus a controller, exactly like `AuthModule` / `OidcModule`, and everything it
+needs (config, chunking, retrieval, document processors) lives inside
+`minix/core/modules/rag/`. It reads the SQL connector from the Registry like any
+repository, authenticates with the `auth` module's API keys, and imports nothing
+that the rest of minix imports back. Long-running work (ingestion, search,
+query) uses FastAPI background tasks plus persisted job rows, so the module needs
+no Celery broker or Kafka.
+
+**Providers** — nothing is tied to one vendor: every model call (answers,
+reranking, embeddings, metadata extraction, document transcription, LLM
+chunking) goes through [LiteLLM](https://docs.litellm.ai/), so changing a model
+name is all it takes to move to another provider, a gateway or a local server:
+
+```env
+LLM_MODEL=anthropic/claude-sonnet-5          # + ANTHROPIC_API_KEY
+EMBEDDING_MODEL=ollama/nomic-embed-text         # local, no key
+EMBEDDING_DIMENSION=768
+RAG_EMBEDDING_SEND_DIMENSIONS=false
+DOCUMENT_PROCESSOR_MODEL=anthropic/claude-sonnet-5
+```
+
+Any OpenAI-compatible endpoint (vLLM, LM Studio, a gateway) works with the
+`openai/<model>` prefix and `OPENAI_API_BASE`. Changing the embedding model or
+its size requires re-indexing: existing vectors were produced by the old one.
+
+**Extending it** — `RagController` exposes protected hook methods (request
+scoping, gating and usage metering, per-collection access policy via
+`_svc_access()`, audit, input rewriting, answer generation, output shaping,
+provider-event and cost recording) and swappable response models
+(`COLLECTION_INFO_MODEL`, `QUERY_RESPONSE_MODEL`, …). All defaults are
+single-scope no-ops. Subclass the controller and register it with
+`provides=RagController`; add columns to the RAG tables with
+single-table-inheritance subclasses of the entities (no `__tablename__`), mounted
+through `provides=` on the paired repository and service.
+
+---
+
 ## Configuration
 
 Minix uses environment variables for configuration. Create a `.env` file in your project root:
@@ -567,10 +727,28 @@ Install development dependencies:
 pip install "minix[dev]"
 ```
 
+### RAG Module
+
+Install the RAG module's dependencies, PostgreSQL driver included (see
+[RAG Module](#rag-module)):
+
+```bash
+pip install "minix[rag]"
+```
+
+### PostgreSQL
+
+Just the PostgreSQL driver for `SqlConnector(driver="postgresql")` (already part
+of the `rag` extra):
+
+```bash
+pip install "minix[postgres]"
+```
+
 ### Install All Extras
 
 ```bash
-pip install "minix[ai,clickhouse,dev]"
+pip install "minix[ai,clickhouse,dev,rag]"
 ```
 
 ---
