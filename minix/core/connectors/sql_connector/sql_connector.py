@@ -140,6 +140,11 @@ class SqlConnector(Connector):
                 pass
             return args
 
+        if self.driver == 'postgresql':
+            return {
+                'connect_timeout': cfg.connect_timeout,
+            }
+
         raise Exception('Driver not supported')
 
     def get_session(self):
@@ -149,6 +154,13 @@ class SqlConnector(Connector):
             return self.Session(bind=conn)
         return self.Session()
 
+    def execute_raw(self, sql: str, params: dict = None):
+        """Execute one raw SQL statement (bound params) in its own transaction."""
+        with self.engine.connect() as conn:
+            result = conn.execute(text(sql), params or {})
+            conn.commit()
+            return result
+
     def get_engine(self):
         return self.engine
 
@@ -157,6 +169,8 @@ class SqlConnector(Connector):
             return self.get_mysql_connection_string()
         elif driver == 'clickhouse':
             return self.clickhouse_connection_string()
+        elif driver == 'postgresql':
+            return self.get_postgresql_connection_string()
         else:
             raise Exception('Driver not supported')
 
@@ -165,3 +179,6 @@ class SqlConnector(Connector):
 
     def clickhouse_connection_string(self) -> str:
         return f'clickhouse+native://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}'
+
+    def get_postgresql_connection_string(self) -> str:
+        return f'postgresql+psycopg2://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}'
