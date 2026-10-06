@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import os
-from typing import Callable, TypeVar, overload
+from typing import Callable, TypeVar
 
-T = TypeVar("T")
+T = TypeVar("T", str, bool, int, float, list[str])
 
 _TRUE = {"1", "true", "yes", "on", "y"}
 _FALSE = {"0", "false", "no", "off", "n", ""}
@@ -26,15 +26,12 @@ def _cast_list(value: str) -> list[str]:
     return [part.strip() for part in value.split(",") if part.strip()]
 
 
-@overload
-def env(key: str, default: str = "") -> str: ...
-
-
-@overload
-def env(key: str, default: T, *, cast: Callable[[str], T]) -> T: ...
-
-
-def env(key: str, default: T = "", *, cast: Callable[[str], T] | None = None) -> T:
+def env(
+    key: str,
+    default: T = "",  # type: ignore[assignment]
+    *,
+    cast: Callable[[str], T] | None = None,
+) -> T:
     """Read ``key`` from the environment, falling back to ``default``.
 
     When ``cast`` is omitted, the cast is inferred from ``default``'s type for
@@ -43,7 +40,7 @@ def env(key: str, default: T = "", *, cast: Callable[[str], T] | None = None) ->
     """
     raw = os.getenv(key)
     if raw is None or raw == "":
-        return default  # type: ignore[return-value]
+        return default
 
     if cast is not None:
         return cast(raw)

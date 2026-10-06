@@ -1,0 +1,20 @@
+.git
+.github
+.venv
+venv
+env
+__pycache__
+*.py[cod]
+*.egg-info
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.coverage
+htmlcov
+.cursor
+.idea
+.vscode
+dist
+build
+.tmp-init-*
+# Keep README.md — pyproject.toml references it for package metadata.

@@ -5,15 +5,17 @@ Usage::
 
     from minix.core.conf import settings
 
-    print(settings.DB_HOST)
+    print(settings.APP_NAME)
+    print(settings.DATABASES["default"]["host"])
 
-By default Minix loads a project ``settings`` module when it is importable
-(created by ``minix init``). Override with ``MINIX_SETTINGS_MODULE``, or leave
-that unset and rely on ``global_settings`` when no project settings exist.
+By default Minix loads a project ``config`` module when importable
+(from ``minix init``). Override with ``MINIX_SETTINGS_MODULE``.
+A pydantic ``config = Settings()`` instance is enough — no uppercase
+re-exports required.
 
 Programmatic configuration (tests)::
 
-    settings.configure(DEBUG=True, DB_HOST="127.0.0.1")
+    settings.configure(DEBUG=True, APP_NAME="test")
 """
 
 from __future__ import annotations
@@ -24,18 +26,40 @@ from types import ModuleType
 from typing import Any
 
 import dotenv
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Resolve .env before global_settings evaluates env() defaults.
-dotenv.load_dotenv()
+# Explicit path avoids find_dotenv() frame issues (e.g. -c / stdin).
+dotenv.load_dotenv(os.environ.get("MINIX_DOTENV_PATH", ".env"))
 
 from . import global_settings as default_settings  # noqa: E402
+from .minix_settings import exports_from_config  # noqa: E402
+
+# Re-export for project ``config.py`` (avoids unresolved transitive imports).
+__all__ = [
+    "BaseSettings",
+    "Field",
+    "ImproperlyConfigured",
+    "Settings",
+    "SettingsConfigDict",
+    "settings",
+]
 
 ENVIRONMENT_VARIABLE = "MINIX_SETTINGS_MODULE"
-DEFAULT_SETTINGS_MODULE = "settings"
+DEFAULT_SETTINGS_MODULES = ("config",)
 
 
 class ImproperlyConfigured(Exception):
     """Raised when settings are used incorrectly."""
+
+
+def _pydantic_config_from_module(mod: ModuleType) -> BaseSettings | None:
+    for attr in ("config", "settings"):
+        obj = getattr(mod, attr, None)
+        if isinstance(obj, BaseSettings):
+            return obj
+    return None
 
 
 class Settings:
@@ -47,15 +71,27 @@ class Settings:
                 setattr(self, name, getattr(default_settings, name))
 
         self.SETTINGS_MODULE = settings_module
-        if settings_module:
-            mod = importlib.import_module(settings_module)
-            self._explicit_settings: set[str] = set()
-            for name in dir(mod):
-                if name.isupper():
-                    setattr(self, name, getattr(mod, name))
-                    self._explicit_settings.add(name)
-        else:
-            self._explicit_settings = set()
+        self._explicit_settings: set[str] = set()
+        self._pydantic: BaseSettings | None = None
+
+        if not settings_module:
+            return
+
+        mod = importlib.import_module(settings_module)
+        pydantic_cfg = _pydantic_config_from_module(mod)
+        if pydantic_cfg is not None:
+            self._pydantic = pydantic_cfg
+            custom = getattr(pydantic_cfg, "minix_exports", None)
+            exported = custom() if callable(custom) else exports_from_config(pydantic_cfg)
+            for name, value in exported.items():
+                setattr(self, name, value)
+                self._explicit_settings.add(name)
+
+        # Uppercase names on the module win last (maps, overrides).
+        for name in dir(mod):
+            if name.isupper():
+                setattr(self, name, getattr(mod, name))
+                self._explicit_settings.add(name)
 
     def __repr__(self) -> str:
         mod = self.SETTINGS_MODULE or "minix.core.conf.global_settings"
@@ -88,12 +124,17 @@ class UserSettingsHolder:
 
 
 def _resolve_settings_module() -> str | None:
-    """Load ``.env``, then pick the settings module (default: ``settings``)."""
-    dotenv.load_dotenv()
+    """Load ``.env``, then pick the config module."""
+    dotenv.load_dotenv(os.environ.get("MINIX_DOTENV_PATH", ".env"))
     explicit = os.environ.get(ENVIRONMENT_VARIABLE)
     if explicit:
         return explicit
-    return DEFAULT_SETTINGS_MODULE
+    import importlib.util
+
+    for candidate in DEFAULT_SETTINGS_MODULES:
+        if importlib.util.find_spec(candidate) is not None:
+            return candidate
+    return None
 
 
 class LazySettings:
@@ -110,7 +151,7 @@ class LazySettings:
         except ModuleNotFoundError:
             if explicit:
                 raise
-            # No project settings.py yet — framework defaults only.
+            # No project config yet — framework defaults only.
             self._wrapped = Settings(None)
 
     def __getattr__(self, name: str) -> Any:

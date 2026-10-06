@@ -1,0 +1,117 @@
+x-backend: &backend
+  build: .
+  env_file:
+    - .env
+  environment:
+    DB_HOST: mysql
+    CELERY_BROKER_URL: redis://redis:6379/0
+    CELERY_RESULT_BACKEND: redis://redis:6379/1
+    REDIS_URL: redis://redis:6379/0
+    QDRANT_URL: http://qdrant:6333
+    OBJECT_STORAGE_ENDPOINT_URL: http://minio:9000
+  networks:
+    - backend
+
+services:
+  mysql:
+    image: mysql:8.0
+    command: --transaction-isolation=READ-COMMITTED
+    env_file:
+      - .env
+    ports:
+      - "${DB_PORT:-__DB_PORT__}:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASS:-rootpass}
+      MYSQL_DATABASE: ${DB_DATABASE:-minix}
+      MYSQL_USER: ${DB_USER:-minix}
+      MYSQL_PASSWORD: ${DB_PASS:-minix}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - backend
+
+  redis:
+    image: redis:latest
+    ports:
+      - "${REDIS_PORT:-__REDIS_PORT__}:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - backend
+
+  qdrant:
+    image: qdrant/qdrant
+    ports:
+      - "${QDRANT_PORT:-__QDRANT_PORT__}:6333"
+      - "${QDRANT_GRPC_PORT:-__QDRANT_GRPC_PORT__}:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__HOST: "0.0.0.0"
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:-}
+    networks:
+      - backend
+
+  minio:
+    image: minio/minio:latest
+    env_file:
+      - .env
+    ports:
+      - "${OBJECT_STORAGE_PORT:-__OBJECT_STORAGE_PORT__}:9000"
+      - "${OBJECT_STORAGE_CONSOLE_PORT:-__OBJECT_STORAGE_CONSOLE_PORT__}:9001"
+    volumes:
+      - minio-data:/data
+    environment:
+      MINIO_ROOT_USER: ${OBJECT_STORAGE_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${OBJECT_STORAGE_SECRET_KEY:-minioadmin}
+    command: server --console-address ":9001" /data
+    networks:
+      - backend
+
+  app:
+    <<: *backend
+    ports:
+      - "${APP_PORT:-__APP_PORT__}:__APP_PORT__"
+    depends_on:
+      - mysql
+      - redis
+      - qdrant
+      - minio
+    command: >
+      uvicorn entries.api:Api
+      --host 0.0.0.0
+      --port __APP_PORT__
+      --reload
+
+  celery_worker:
+    <<: *backend
+    depends_on:
+      - mysql
+      - redis
+      - app
+    command: >
+      celery -A entries.worker.Worker worker
+      --loglevel=info
+      --hostname=worker@%h
+
+  celery_beat:
+    <<: *backend
+    depends_on:
+      - mysql
+      - redis
+      - app
+    command: >
+      celery -A entries.beat.Beat beat
+      --loglevel=info
+      --scheduler redbeat.RedBeatScheduler
+
+volumes:
+  mysql-data:
+  redis-data:
+  qdrant_data:
+  minio-data:
+
+networks:
+  backend:
+    driver: bridge

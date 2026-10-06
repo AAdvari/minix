@@ -1,19 +1,21 @@
 """
 Default Minix settings.
 
-These are used when no project settings module is available.
-Project ``settings.py`` files (from ``minix init``) overlay these values
-automatically.
+Used when no project ``config.py`` is available.
+``minix init`` scaffolds a ``config.py`` (pydantic-settings)
+that overlays these defaults.
 
-Every setting is read from the environment with a sensible default so apps
-work without a hand-written ``.env``.
+``bootstrap_from_settings()`` auto-registers connectors from connection maps and installs
+``INSTALLED_MODULES`` unless explicit lists are passed.
 """
 
 from __future__ import annotations
 
+import os
+
 import dotenv
 
-dotenv.load_dotenv()
+dotenv.load_dotenv(os.environ.get("MINIX_DOTENV_PATH", ".env"))
 
 from minix.core.conf.env import env, env_optional
 
@@ -26,52 +28,95 @@ APP_HOST = env("APP_HOST", "0.0.0.0")
 APP_PORT = env("APP_PORT", 8000)
 SECRET_KEY = env_optional("SECRET_KEY")
 
-# ---------------------------------------------------------------------------
-# SQL database
-# ---------------------------------------------------------------------------
-DB_USER = env("DB_USER", "root")
-DB_PASS = env("DB_PASS", "")
-DB_HOST = env("DB_HOST", "localhost")
-DB_PORT = env("DB_PORT", 3306)
-DB_DATABASE = env("DB_DATABASE", "minix")
-DB_DRIVER = env("DB_DRIVER", "mysql")
+# Dotted paths to Module instances (or Module subclasses).
+# bootstrap_from_settings() installs these when modules= is omitted.
+INSTALLED_MODULES = [
+    # "minix.core.modules.auth.AuthModule",
+    # "src.modules.example.ExampleModule",
+]
 
 # ---------------------------------------------------------------------------
-# Celery / Redis scheduler
+# SQL databases
 # ---------------------------------------------------------------------------
-CELERY_BROKER_URL = env("CELERY_BROKER_URL", "redis://localhost:6379/0")
-CELERY_RESULT_BACKEND = env(
-    "CELERY_RESULT_BACKEND",
-    "redis://localhost:6379/1",
-)
-CELERY_TASK_SERIALIZER = env("CELERY_TASK_SERIALIZER", "json")
-CELERY_RESULT_SERIALIZER = env("CELERY_RESULT_SERIALIZER", "json")
-CELERY_TIMEZONE = env("CELERY_TIMEZONE", "GMT")
-REDIS_URL = env("REDIS_URL", CELERY_BROKER_URL)
+DATABASES = {
+    "default": {
+        "USER": env("DB_USER", "root"),
+        "PASSWORD": env("DB_PASS", ""),
+        "HOST": env("DB_HOST", "localhost"),
+        "PORT": env("DB_PORT", 3306),
+        "NAME": env("DB_DATABASE", "minix"),
+        "DRIVER": env("DB_DRIVER", "mysql"),
+    },
+    # "analytics": {
+    #     "USER": env("ANALYTICS_DB_USER", "root"),
+    #     "PASSWORD": env("ANALYTICS_DB_PASS", ""),
+    #     "HOST": env("ANALYTICS_DB_HOST", "localhost"),
+    #     "PORT": env("ANALYTICS_DB_PORT", 3306),
+    #     "NAME": env("ANALYTICS_DB_DATABASE", "analytics"),
+    #     "DRIVER": env("ANALYTICS_DB_DRIVER", "mysql"),
+    # },
+}
+
+# ---------------------------------------------------------------------------
+# Celery / Redis
+# ---------------------------------------------------------------------------
+CELERY_CONNECTIONS = {
+    "default": {
+        "BROKER_URL": env("CELERY_BROKER_URL", "redis://localhost:6379/0"),
+        "RESULT_BACKEND": env("CELERY_RESULT_BACKEND", "redis://localhost:6379/1"),
+        "TASK_SERIALIZER": env("CELERY_TASK_SERIALIZER", "json"),
+        "RESULT_SERIALIZER": env("CELERY_RESULT_SERIALIZER", "json"),
+        "ACCEPT_CONTENT": ["json"],
+        "TIMEZONE": env("CELERY_TIMEZONE", "GMT"),
+    },
+    # "priority": {
+    #     "BROKER_URL": env("PRIORITY_CELERY_BROKER_URL", "redis://localhost:6379/2"),
+    #     "RESULT_BACKEND": env("PRIORITY_CELERY_RESULT_BACKEND", "redis://localhost:6379/3"),
+    #     "TASK_SERIALIZER": "json",
+    #     "RESULT_SERIALIZER": "json",
+    #     "ACCEPT_CONTENT": ["json"],
+    #     "TIMEZONE": env("CELERY_TIMEZONE", "GMT"),
+    # },
+}
+
+REDIS_CONNECTIONS = {
+    "default": {
+        "URL": env("REDIS_URL", CELERY_CONNECTIONS["default"]["BROKER_URL"]),
+    },
+}
 
 # ---------------------------------------------------------------------------
 # Kafka
 # ---------------------------------------------------------------------------
-KAFKA_BOOTSTRAP_SERVERS = env("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+KAFKA_CLUSTERS = {
+    "default": {
+        "BOOTSTRAP_SERVERS": env("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
+    },
+}
 
 # ---------------------------------------------------------------------------
 # Qdrant
 # ---------------------------------------------------------------------------
-QDRANT_URL = env("QDRANT_URL", "http://localhost:6333")
-QDRANT_API_KEY = env_optional("QDRANT_API_KEY")
+QDRANT_CONNECTIONS = {
+    "default": {
+        "URL": env("QDRANT_URL", "http://localhost:6333"),
+        "API_KEY": env_optional("QDRANT_API_KEY"),
+    },
+}
 
 # ---------------------------------------------------------------------------
 # Object storage (S3-compatible)
 # ---------------------------------------------------------------------------
-OBJECT_STORAGE_ENDPOINT_URL = env(
-    "OBJECT_STORAGE_ENDPOINT_URL",
-    "http://localhost:9000",
-)
-OBJECT_STORAGE_ACCESS_KEY = env("OBJECT_STORAGE_ACCESS_KEY", "minioadmin")
-OBJECT_STORAGE_SECRET_KEY = env("OBJECT_STORAGE_SECRET_KEY", "minioadmin")
-OBJECT_STORAGE_BUCKET_NAME = env("OBJECT_STORAGE_BUCKET_NAME", "minix")
-OBJECT_STORAGE_USE_SSL = env("OBJECT_STORAGE_USE_SSL", False)
-OBJECT_STORAGE_VERIFY_SSL = env("OBJECT_STORAGE_VERIFY_SSL", False)
+OBJECT_STORAGES = {
+    "default": {
+        "ENDPOINT_URL": env("OBJECT_STORAGE_ENDPOINT_URL", "http://localhost:9000"),
+        "ACCESS_KEY": env("OBJECT_STORAGE_ACCESS_KEY", "minioadmin"),
+        "SECRET_KEY": env("OBJECT_STORAGE_SECRET_KEY", "minioadmin"),
+        "BUCKET_NAME": env("OBJECT_STORAGE_BUCKET_NAME", "minix"),
+        "USE_SSL": env("OBJECT_STORAGE_USE_SSL", False),
+        "VERIFY_SSL": env("OBJECT_STORAGE_VERIFY_SSL", False),
+    },
+}
 
 # ---------------------------------------------------------------------------
 # MLflow (optional AI extra)

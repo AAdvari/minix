@@ -1,17 +1,14 @@
 import asyncio
 import importlib.util
 from typing import Self
+
 from fastapi import FastAPI
 
-if importlib.util.find_spec('qdrant_client'):
-    from minix.core.connectors import QdrantConnector
-    from minix.core.repository import QdrantRepository
 from minix.core.connectors import SqlConnector
 from minix.core.conf.builders import kafka_bootstrap_servers
 from minix.core.module import Module
 from minix.core.registry.registry import Registry
-from minix.core.repository import SqlRepository
-from minix.core.repository import RedisRepository
+from minix.core.repository import RedisRepository, SqlRepository
 from minix.core.scheduler import Scheduler
 
 
@@ -61,24 +58,29 @@ class BusinessModule(Module):
                         redis
                     )
                 )
-            elif importlib.util.find_spec('qdrant_client') and issubclass(repository, QdrantRepository):
+            elif importlib.util.find_spec("qdrant_client"):
+                from minix.core.connectors import QdrantConnector
+                from minix.core.repository import QdrantRepository
+
+                if not issubclass(repository, QdrantRepository):
+                    continue
                 if salt is not None:
                     qdrant_connector = Registry().get(QdrantConnector, salt=salt)
                 else:
                     qdrant_connector = Registry().get(QdrantConnector)
                 repo = repository(
-                        self.entities[idx],
-                        qdrant_connector
-                    )
+                    self.entities[idx],
+                    qdrant_connector,
+                )
                 try:
                     loop = asyncio.get_running_loop()
                     asyncio.run_coroutine_threadsafe(repo.create_collection(), loop)
-                except RuntimeError as e:
+                except RuntimeError:
                     asyncio.run(repo.create_collection())
 
                 Registry().register(
                     repository,
-                    repo
+                    repo,
                 )
         return self
 
