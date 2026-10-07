@@ -702,7 +702,7 @@ minix init APP_NAME [OPTIONS]
 | `.env.example` | Documented env keys with copy instructions (commit this) |
 | `.env` | Local overrides without the copy header (gitignored) |
 | `.gitignore` | Python / IDE / dotenv ignores |
-| `Dockerfile` | App image (`pip install minix` or `minix[vdb,…]` from PyPI) |
+| `Dockerfile` | App image (`pip install "minix~=X.Y.Z"` / extras from PyPI) |
 | `docker-compose.yml` | MySQL, Redis, MinIO, API, Celery; optional Qdrant / ClickHouse / MLflow |
 | `.dockerignore` | Build context excludes |
 | `entries/` | `api.py`, `worker.py`, `beat.py` process entrypoints |
@@ -717,6 +717,8 @@ minix init APP_NAME [OPTIONS]
   (e.g. `pip install "minix[vdb]"`), `minix init` adds matching `pip install`
   in the Dockerfile and enables the related compose services and config blocks.
   Override with `--extras vdb,clickhouse,ai` or use `--no-extras` for a minimal stack.
+- **Version pin:** The Dockerfile uses a compatible release on the installed minor
+  (e.g. ``minix~=0.2.2`` → latest ``0.2.x`` ≥ ``0.2.2``, not ``0.3``).
 
 ```bash
 minix init my_app

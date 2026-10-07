@@ -54,11 +54,56 @@ def resolve_minix_extras(
     return detect_installed_minix_extras()
 
 
+# First PyPI release that exports ``bootstrap_from_settings`` for the Docker template.
+_MIN_DOCKER_MINIX = "0.2.2"
+
+
+def _version_tuple(value: str) -> tuple[int, ...]:
+    parts: list[int] = []
+    for piece in value.split("."):
+        digits = "".join(ch for ch in piece if ch.isdigit())
+        if not digits:
+            break
+        parts.append(int(digits))
+    return tuple(parts) or (0,)
+
+
+def _compatible_release_constraint(version: str) -> str:
+    """``~=X.Y.Z`` → latest patch on the same minor (e.g. 0.2.2 → any 0.2.x ≥ 0.2.2)."""
+    parts = list(_version_tuple(version))
+    while len(parts) < 3:
+        parts.append(0)
+    major, minor, patch = parts[0], parts[1], parts[2]
+    return f"~={major}.{minor}.{patch}"
+
+
+def _minix_version_constraint() -> str:
+    """Pin Docker to the installed minor line, allowing newer patch releases."""
+    floor = _version_tuple(_MIN_DOCKER_MINIX)
+    try:
+        from importlib.metadata import version
+
+        installed = version("minix")
+        parts = list(_version_tuple(installed))
+        while len(parts) < 3:
+            parts.append(0)
+        if tuple(parts[:2]) == floor[:2] and parts[2] < floor[2]:
+            parts[2] = floor[2]
+        if tuple(parts) < floor:
+            return _compatible_release_constraint(_MIN_DOCKER_MINIX)
+        return _compatible_release_constraint(
+            f"{parts[0]}.{parts[1]}.{parts[2]}"
+        )
+    except Exception:
+        return _compatible_release_constraint(_MIN_DOCKER_MINIX)
+
+
 def minix_pip_install_spec(extras: Iterable[str]) -> str:
     chosen = [e for e in _EXTRA_ORDER if e in extras]
+    constraint = _minix_version_constraint()
     if not chosen:
-        return "minix"
-    return f'minix[{",".join(chosen)}]'
+        return f"minix{constraint}"
+    return f'minix[{",".join(chosen)}]{constraint}'
 
 
 def apply_feature_blocks(text: str, extras: set[str]) -> str:
