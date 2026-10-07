@@ -6,6 +6,12 @@ from pathlib import Path
 
 import typer
 
+from minix.core.cli.commands.init_scaffold import (
+    apply_feature_blocks,
+    minix_pip_install_spec,
+    resolve_minix_extras,
+)
+
 _TEMPLATE_DIR = Path(__file__).resolve().parents[2] / "conf" / "project_template"
 _SETTINGS_MODULE_LINE = "MINIX_SETTINGS_MODULE=config"
 
@@ -17,6 +23,7 @@ _DEFAULT_PORTS = {
     "QDRANT_GRPC_PORT": 6334,
     "OBJECT_STORAGE_PORT": 9000,
     "OBJECT_STORAGE_CONSOLE_PORT": 9001,
+    "MLFLOW_PORT": 5000,
 }
 
 # Relative paths under the template dir → destination under the project root.
@@ -83,8 +90,16 @@ def _write_if_missing(root: Path, relative: str, content: str, created: list[str
     created.append(relative)
 
 
-def _render(content: str, *, app_name: str, ports: dict[str, int]) -> str:
-    rendered = content.replace("my_project", app_name)
+def _render(
+    content: str,
+    *,
+    app_name: str,
+    ports: dict[str, int],
+    extras: set[str],
+) -> str:
+    rendered = apply_feature_blocks(content, extras)
+    rendered = rendered.replace("my_project", app_name)
+    rendered = rendered.replace("__MINIX_PIP_SPEC__", minix_pip_install_spec(extras))
     for key, value in ports.items():
         rendered = rendered.replace(f"__{key}__", str(value))
     # Dockerfile uses a literal EXPOSE 8000 so IDE validators accept the
@@ -135,6 +150,20 @@ def init(
         _DEFAULT_PORTS["OBJECT_STORAGE_CONSOLE_PORT"],
         "Host port mapped to MinIO console (container stays on 9001).",
     ),
+    extras: str | None = typer.Option(
+        None,
+        "--extras",
+        help=(
+            "Comma-separated Minix PyPI extras for Docker and compose "
+            "(vdb, clickhouse, ai). Default: infer from packages installed "
+            "in this environment."
+        ),
+    ),
+    no_extras: bool = typer.Option(
+        False,
+        "--no-extras",
+        help="Minimal scaffold: base minix only, no optional compose services.",
+    ),
 ):
     """
     Scaffold a Minix project in the current directory.
@@ -142,14 +171,22 @@ def init(
     Creates ``config.py`` (pydantic settings), ``.env``, ``.env.example``,
     ``.gitignore``, ``Dockerfile``, ``docker-compose.yml``, ``.dockerignore``,
     and ``entries/`` process entrypoints. Optional ``--*-port`` flags bake
-    defaults into Docker / env files. Existing optional files are left intact
-    (``.env`` only gains ``MINIX_SETTINGS_MODULE`` when missing).
+    defaults into Docker / env files. Docker install spec and optional services
+    follow detected or explicit Minix extras (``[vdb]``, ``[clickhouse]``,
+    ``[ai]``). Existing optional files are left intact (``.env`` only gains
+    ``MINIX_SETTINGS_MODULE`` when missing).
     Does nothing if ``config.py`` or ``settings.py`` already exists.
     """
     root = Path.cwd()
     if (root / "config.py").exists() or (root / "settings.py").exists():
         typer.echo("config.py or settings.py already exists", err=True)
         raise typer.Exit(code=1)
+
+    try:
+        minix_extras = resolve_minix_extras(no_extras=no_extras, extras_option=extras)
+    except ValueError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
 
     ports = {
         "APP_PORT": app_port,
@@ -159,18 +196,13 @@ def init(
         "QDRANT_GRPC_PORT": qdrant_grpc_port,
         "OBJECT_STORAGE_PORT": object_storage_port,
         "OBJECT_STORAGE_CONSOLE_PORT": object_storage_console_port,
+        "MLFLOW_PORT": _DEFAULT_PORTS["MLFLOW_PORT"],
     }
 
-    config = _render(
-        (_TEMPLATE_DIR / "config.py").read_text(),
-        app_name=app_name,
-        ports=ports,
-    )
-    env_example = _render(
-        (_TEMPLATE_DIR / ".env.example").read_text(),
-        app_name=app_name,
-        ports=ports,
-    )
+    render_kw = dict(app_name=app_name, ports=ports, extras=minix_extras)
+
+    config = _render((_TEMPLATE_DIR / "config.py").read_text(), **render_kw)
+    env_example = _render((_TEMPLATE_DIR / ".env.example").read_text(), **render_kw)
     env = _env_file_content(env_example)
 
     (root / "config.py").write_text(config)
@@ -189,12 +221,13 @@ def init(
     for relative in _OPTIONAL_FILES:
         content = _render(
             (_TEMPLATE_DIR / relative).read_text(),
-            app_name=app_name,
-            ports=ports,
+            **render_kw,
         )
         _write_if_missing(root, relative, content, created)
 
     port_summary = ", ".join(f"{k}={v}" for k, v in ports.items())
+    extras_label = minix_pip_install_spec(minix_extras)
     typer.echo(
-        f"Initialized (APP_NAME={app_name}; {port_summary}); wrote: {', '.join(created)}"
+        f"Initialized (APP_NAME={app_name}; pip={extras_label}; {port_summary}); "
+        f"wrote: {', '.join(created)}"
     )

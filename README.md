@@ -691,6 +691,8 @@ minix init APP_NAME [OPTIONS]
 | `--qdrant-grpc-port` | `6334` | Host port for Qdrant gRPC |
 | `--object-storage-port` | `9000` | Host port for MinIO API |
 | `--object-storage-console-port` | `9001` | Host port for MinIO console |
+| `--extras` | *(auto)* | Comma-separated PyPI extras: `vdb`, `clickhouse`, `ai` |
+| `--no-extras` | off | Minimal Docker/compose (base `minix` only) |
 
 **Creates:**
 
@@ -700,8 +702,8 @@ minix init APP_NAME [OPTIONS]
 | `.env.example` | Documented env keys with copy instructions (commit this) |
 | `.env` | Local overrides without the copy header (gitignored) |
 | `.gitignore` | Python / IDE / dotenv ignores |
-| `Dockerfile` | App image (`pip install minix` from PyPI) |
-| `docker-compose.yml` | MySQL, Redis, Qdrant, MinIO, API, Celery worker/beat |
+| `Dockerfile` | App image (`pip install minix` or `minix[vdb,…]` from PyPI) |
+| `docker-compose.yml` | MySQL, Redis, MinIO, API, Celery; optional Qdrant / ClickHouse / MLflow |
 | `.dockerignore` | Build context excludes |
 | `entries/` | `api.py`, `worker.py`, `beat.py` process entrypoints |
 
@@ -711,10 +713,17 @@ minix init APP_NAME [OPTIONS]
 - Existing optional files (`.env`, `.gitignore`, Docker files, `entries/`) are kept
   (`.env` only gains `MINIX_SETTINGS_MODULE` when missing).
 - Port flags bake defaults into `Dockerfile`, `docker-compose.yml`, `.env`, and `config.py`.
+- **Optional extras:** If you installed Minix with extras in the same environment
+  (e.g. `pip install "minix[vdb]"`), `minix init` adds matching `pip install`
+  in the Dockerfile and enables the related compose services and config blocks.
+  Override with `--extras vdb,clickhouse,ai` or use `--no-extras` for a minimal stack.
 
 ```bash
 minix init my_app
 minix init my_app --app-port 8001 --db-port 3307 --redis-port 6380
+pip install "minix[vdb]"
+minix init my_app --extras vdb
+minix init my_app --no-extras
 ```
 
 ---

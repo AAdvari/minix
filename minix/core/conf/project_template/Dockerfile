@@ -9,7 +9,7 @@ RUN apt-get update && \
         pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --upgrade pip && pip install "minix"
+RUN pip install --upgrade pip && pip install "__MINIX_PIP_SPEC__"
 
 COPY . .
 

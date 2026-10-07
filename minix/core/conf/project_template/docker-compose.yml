@@ -7,7 +7,12 @@ x-backend: &backend
     CELERY_BROKER_URL: redis://redis:6379/0
     CELERY_RESULT_BACKEND: redis://redis:6379/1
     REDIS_URL: redis://redis:6379/0
+# __BEGIN_VDB__
     QDRANT_URL: http://qdrant:6333
+# __END_VDB__
+# __BEGIN_AI__
+    MLFLOW_TRACKING_URL: http://mlflow:5000
+# __END_AI__
     OBJECT_STORAGE_ENDPOINT_URL: http://minio:9000
   networks:
     - backend
@@ -40,6 +45,7 @@ services:
     networks:
       - backend
 
+# __BEGIN_VDB__
   qdrant:
     image: qdrant/qdrant
     ports:
@@ -53,6 +59,33 @@ services:
     networks:
       - backend
 
+# __END_VDB__
+# __BEGIN_CLICKHOUSE__
+  clickhouse:
+    image: clickhouse/clickhouse-server:24
+    ports:
+      - "${CLICKHOUSE_PORT:-9000}:9000"
+      - "${CLICKHOUSE_HTTP_PORT:-8123}:8123"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    networks:
+      - backend
+
+# __END_CLICKHOUSE__
+# __BEGIN_AI__
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.22.0
+    command: mlflow server --host 0.0.0.0 --port 5000
+    ports:
+      - "${MLFLOW_PORT:-5000}:5000"
+    networks:
+      - backend
+
+# __END_AI__
   minio:
     image: minio/minio:latest
     env_file:
@@ -76,7 +109,15 @@ services:
     depends_on:
       - mysql
       - redis
+# __BEGIN_VDB__
       - qdrant
+# __END_VDB__
+# __BEGIN_CLICKHOUSE__
+      - clickhouse
+# __END_CLICKHOUSE__
+# __BEGIN_AI__
+      - mlflow
+# __END_AI__
       - minio
     command: >
       uvicorn entries.api:Api
@@ -109,7 +150,12 @@ services:
 volumes:
   mysql-data:
   redis-data:
+# __BEGIN_VDB__
   qdrant_data:
+# __END_VDB__
+# __BEGIN_CLICKHOUSE__
+  clickhouse-data:
+# __END_CLICKHOUSE__
   minio-data:
 
 networks:

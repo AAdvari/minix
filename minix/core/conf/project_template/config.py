@@ -40,6 +40,16 @@ class Settings(BaseSettings):
                 "name": env("DB_DATABASE", "minix"),
                 "driver": env("DB_DRIVER", "mysql"),
             },
+# __BEGIN_CLICKHOUSE__
+            "clickhouse": {
+                "user": env("CLICKHOUSE_USER", "default"),
+                "password": env("CLICKHOUSE_PASS", ""),
+                "host": env("CLICKHOUSE_HOST", "localhost"),
+                "port": env("CLICKHOUSE_PORT", 9000),
+                "name": env("CLICKHOUSE_DATABASE", "default"),
+                "driver": "clickhouse",
+            },
+# __END_CLICKHOUSE__
             # "analytics": {
             #     "user": env("ANALYTICS_DB_USER", "root"),
             #     "password": env("ANALYTICS_DB_PASS", ""),
@@ -100,7 +110,8 @@ class Settings(BaseSettings):
         }
     )
 
-    # Qdrant
+# __BEGIN_VDB__
+    # Qdrant (minix[vdb])
     qdrant_connections: dict[str, dict[str, Any]] = Field(
         default_factory=lambda: {
             "default": {
@@ -110,6 +121,11 @@ class Settings(BaseSettings):
         }
     )
 
+# __END_VDB__
+# __BEGIN_NO_VDB__
+    qdrant_connections: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
+# __END_NO_VDB__
     # Object storage (S3 / MinIO)
     object_storages: dict[str, dict[str, Any]] = Field(
         default_factory=lambda: {
@@ -128,7 +144,14 @@ class Settings(BaseSettings):
     )
 
     # Optional
+# __BEGIN_AI__
+    mlflow_tracking_url: str = env(
+        "MLFLOW_TRACKING_URL", "http://localhost:__MLFLOW_PORT__"
+    )
+# __END_AI__
+# __BEGIN_NO_AI__
     mlflow_tracking_url: str = "http://localhost:5000"
+# __END_NO_AI__
     python_version: str = "3.11"
 
     oidc_issuer: str = ""
