@@ -49,7 +49,7 @@
 - **Object Storage**: S3-compatible storage support via `boto3`
 - **ML Workflows**: Optional MLflow integration for model versioning and deployment
 - **Dependency Registry**: Singleton-based service container for clean dependency injection
-- **Environment Management**: Configuration via `.env` files using `dotenv`
+- **Environment Management**: `config.py` (pydantic-settings) with `.env` support
 
 ---
 
@@ -105,8 +105,12 @@ pip install -e .
 The `bootstrap` function initializes your application by registering connectors and modules:
 
 ```python
-from minix.core.bootstrap import bootstrap
+# Preferred: connectors and INSTALLED_MODULES come from config.py.
+from minix.core.bootstrap import bootstrap_from_settings
+bootstrap_from_settings()
 
+# Deprecated (backward compatible): pass explicit lists.
+from minix.core.bootstrap import bootstrap
 bootstrap(
     modules=[Module1(), Module2()],
     connectors=[
@@ -133,7 +137,7 @@ class ProductModule(BusinessModule):
 ```
 
 **Module Methods:**
-- `add_binding(entity, repository, service, connector_salt=None)` - Register a paired entity / repository / service (preferred)
+- `add_binding(entity, repository, service, connection=None)` - Register a paired entity / repository / service (preferred)
 - `add_entity(entity)` - Register a data entity (**deprecated**, use `add_binding`)
 - `add_repository(repository, connector_salt)` - Register a repository with optional connector (**deprecated**, use `add_binding`)
 - `add_service(service)` - Register a service (**deprecated**, use `add_binding`)
@@ -267,46 +271,33 @@ class UserController(Controller):
 #### SQL Connector (MySQL/ClickHouse)
 
 ```python
-from minix.core.connectors.sql_connector import SqlConnector, SqlConnectorConfig
+from minix.core.connectors import SqlConnector
 
-config = SqlConnectorConfig(
-    username="root",
-    password="password",
-    host="localhost",
-    port=3306,
-    database="mydb",
-    driver="mysql",  # or "clickhouse"
-    connect_timeout=30,
-    pool_recycle=3600
-)
-connector = SqlConnector(config)
+# Reads DB_* from settings / env
+connector = SqlConnector()
+
+# Deprecated — still supported for backward compatibility:
+# from minix.core.connectors import SqlConnector, SqlConnectorConfig
+# connector = SqlConnector(SqlConnectorConfig(username="root", ...))
 ```
 
 #### Qdrant Connector
 
 ```python
-from minix.core.connectors.qdrant_connector import QdrantConnector
+from minix.core.connectors import QdrantConnector
 
-connector = QdrantConnector(
-    url="http://localhost:6333",
-    api_key="your-api-key"
-)
+# Reads QDRANT_CONNECTIONS[connection] from settings / env
+connector = QdrantConnector()
 await connector.connect()
 ```
 
 #### Object Storage Connector (S3-compatible)
 
 ```python
-from minix.core.connectors.object_storage_connector import ObjectStorageConnector
-from minix.core.connectors.object_storage_connector.config import ObjectStorageConfig
+from minix.core.object_storage import ObjectStorageConnector
 
-config = ObjectStorageConfig(
-    endpoint_url="https://s3.amazonaws.com",
-    access_key="your-access-key",
-    secret_key="your-secret-key",
-    bucket_name="my-bucket"
-)
-connector = ObjectStorageConnector(config)
+# Reads OBJECT_STORAGES[connection] from settings / env
+connector = ObjectStorageConnector()
 
 # Upload, download, delete files
 await connector.upload_file(file_obj, "path/to/file.txt")
@@ -524,19 +515,91 @@ class MyMlflowModel(MlflowModel):
 
 ## Configuration
 
-Minix uses environment variables for configuration. Create a `.env` file in your project root:
+Minix uses a **pydantic-settings** config module (`config.py`).
+Values come from the environment / `.env`, with defaults on the `Settings` class.
+
+### Project config
+
+```bash
+minix init my_project
+```
+
+This creates `config.py`, `.env`, `.env.example`, `Dockerfile`,
+`docker-compose.yml`, and `entries/`. The name argument sets `app_name`;
+optional `--*-port` flags set Docker / env port defaults.
+`.env` includes `MINIX_SETTINGS_MODULE=config`.
+
+
+```python
+from minix.core.conf import settings
+from config import config
+
+print(settings.APP_NAME)
+print(settings.DATABASES["default"]["host"])
+print(config.app_name)  # same pydantic instance
+```
+
+Override the module with `MINIX_SETTINGS_MODULE`. With no `config` module,
+framework defaults from `global_settings` are used.
+
+### Connectors from config
+
+Edit the `Settings` class (or the exported `DATABASES` map) in `config.py`.
+When ``bootstrap_from_settings()`` is called without ``connectors=``, Minix registers one
+connector per map key:
+
+```python
+# config.py — add another database entry under DATABASES
+DATABASES = {
+    "default": {...},
+    "analytics": {
+        "user": "...",
+        "password": "...",
+        "host": "...",
+        "port": 3306,
+        "name": "analytics",
+        "driver": "mysql",
+    },
+}
+
+# entries/api.py
+bootstrap_from_settings()
+```
+
+Maps wired automatically: ``DATABASES``, ``OBJECT_STORAGES``,
+``QDRANT_CONNECTIONS``, ``REDIS_CONNECTIONS``. Each key becomes Registry
+``salt`` (``"default"`` → no salt).
+
+Modules are listed in ``INSTALLED_MODULES`` as dotted paths::
+
+    INSTALLED_MODULES = [
+        "minix.core.modules.auth.AuthModule",
+        "src.modules.example.ExampleModule",
+    ]
+
+Pass an explicit ``connectors=[...]`` / ``modules=[...]`` list to take full
+control (existing apps keep working). Pass ``connectors=[]`` /
+``modules=[]`` to register/install none.
+
+Multiple Celery apps use ``CELERY_CONNECTIONS``;
+``scheduler_config(connection="priority")`` picks a named entry.
+Bootstrap still registers the ``"default"`` scheduler when modules need tasks.
+
+Missing keys raise ``ImproperlyConfigured``.
+
+Passing an explicit ``SqlConnectorConfig`` / URL still works but is
+**deprecated**; prefer ``connection=`` with settings maps.
+
+### Environment overrides
+
+Any key in `.env` overrides the default in `config.py`:
 
 ```env
-# Celery Configuration
+DB_HOST=localhost
+DB_DATABASE=myapp
 CELERY_BROKER_URL=redis://localhost:6379/0
-CELERY_RESULT_BACKEND=db+mysql://root:password@localhost:3306/celery_results
-
-# Kafka Configuration
 KAFKA_BOOTSTRAP_SERVERS=localhost:9092
-
-# MLflow Configuration (for AI extras)
 MLFLOW_TRACKING_URL=http://localhost:5000
-PYTHON_VERSION=3.10
 ```
 
 ---
@@ -559,18 +622,10 @@ Install with ClickHouse support:
 pip install "minix[clickhouse]"
 ```
 
-### Development Tools
-
-Install development dependencies:
-
-```bash
-pip install "minix[dev]"
-```
-
 ### Install All Extras
 
 ```bash
-pip install "minix[ai,clickhouse,dev]"
+pip install "minix[ai,vdb,clickhouse]"
 ```
 
 ---
@@ -599,12 +654,76 @@ connector = Registry().get(SqlConnector, salt="analytics")
 
 ## CLI Commands
 
-```bash
-# Initialize a new project
-minix init <project_name>
+Install Minix, then use the `minix` entry point:
 
-# Show framework version
-minix version
+```bash
+minix --help
+minix <command> --help
+```
+
+### Global options
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--version` | `-v` | Print the installed Minix version and exit |
+| `--help` | | Show CLI help |
+
+```bash
+minix -v
+minix --version
+```
+
+### `minix init`
+
+Scaffold a project in the **current directory**.
+
+```bash
+minix init APP_NAME [OPTIONS]
+```
+
+| Argument / option | Default | Description |
+|-------------------|---------|-------------|
+| `APP_NAME` | *(required)* | Written to `app_name` in `config.py`, `.env`, and `.env.example` |
+| `--app-port` | `8000` | API port (Dockerfile `EXPOSE` / compose `app` mapping) |
+| `--db-port` | `3306` | Host port for MySQL |
+| `--redis-port` | `6379` | Host port for Redis |
+| `--qdrant-port` | `6333` | Host port for Qdrant HTTP |
+| `--qdrant-grpc-port` | `6334` | Host port for Qdrant gRPC |
+| `--object-storage-port` | `9000` | Host port for MinIO API |
+| `--object-storage-console-port` | `9001` | Host port for MinIO console |
+| `--extras` | *(auto)* | Comma-separated PyPI extras: `vdb`, `clickhouse`, `ai` |
+| `--no-extras` | off | Minimal Docker/compose (base `minix` only) |
+
+**Creates:**
+
+| File | Purpose |
+|------|---------|
+| `config.py` | Explicit pydantic `Settings` (all options in one file) |
+| `.env.example` | Documented env keys with copy instructions (commit this) |
+| `.env` | Local overrides without the copy header (gitignored) |
+| `.gitignore` | Python / IDE / dotenv ignores |
+| `Dockerfile` | App image (`pip install minix` or `minix[vdb,…]` from PyPI) |
+| `docker-compose.yml` | MySQL, Redis, MinIO, API, Celery; optional Qdrant / ClickHouse / MLflow |
+| `.dockerignore` | Build context excludes |
+| `entries/` | `api.py`, `worker.py`, `beat.py` process entrypoints |
+
+**Behavior:**
+
+- Fails with exit code `1` if `config.py` or `settings.py` already exists.
+- Existing optional files (`.env`, `.gitignore`, Docker files, `entries/`) are kept
+  (`.env` only gains `MINIX_SETTINGS_MODULE` when missing).
+- Port flags bake defaults into `Dockerfile`, `docker-compose.yml`, `.env`, and `config.py`.
+- **Optional extras:** If you installed Minix with extras in the same environment
+  (e.g. `pip install "minix[vdb]"`), `minix init` adds matching `pip install`
+  in the Dockerfile and enables the related compose services and config blocks.
+  Override with `--extras vdb,clickhouse,ai` or use `--no-extras` for a minimal stack.
+
+```bash
+minix init my_app
+minix init my_app --app-port 8001 --db-port 3307 --redis-port 6380
+pip install "minix[vdb]"
+minix init my_app --extras vdb
+minix init my_app --no-extras
 ```
 
 ---

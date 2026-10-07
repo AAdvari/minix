@@ -1,6 +1,7 @@
 from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy import create_engine, text
-from minix.core.connectors import Connector
+import warnings
+from minix.core.connectors.connector import Connector
 
 class SqlConnectorConfig:
     def __init__(
@@ -87,8 +88,36 @@ class SqlConnectorConfig:
         )
 
 class SqlConnector(Connector):
-    def __init__(self, sql_connector_config: SqlConnectorConfig):
-        cfg = sql_connector_config
+    def __init__(
+        self,
+        sql_connector_config: SqlConnectorConfig | None = None,
+        *,
+        connection: str = "default",
+        settings=None,
+    ):
+        """Create a SQL connector.
+
+        Prefer ``SqlConnector(connection=...)`` with ``settings.DATABASES``.
+        Passing an explicit ``SqlConnectorConfig`` is deprecated but still
+        supported for backward compatibility.
+
+        Registry identity is still the bootstrap **salt**
+        (``(SqlConnector(...), salt)`` / ``add_binding(..., connection=...)``).
+        """
+        self.connection_name = connection
+
+        if sql_connector_config is None:
+            from minix.core.conf.builders import sql_connector_config as build_sql_config
+
+            cfg = build_sql_config(settings=settings, connection=connection)
+        else:
+            warnings.warn(
+                "Passing SqlConnectorConfig to SqlConnector is deprecated; "
+                "use SqlConnector(connection=...) with settings.DATABASES instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            cfg = sql_connector_config
         self.username = cfg.username
         self.password = cfg.password
         self.host = cfg.host

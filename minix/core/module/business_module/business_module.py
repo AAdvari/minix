@@ -1,17 +1,14 @@
 import asyncio
 import importlib.util
-import os
 from typing import Self
+
 from fastapi import FastAPI
 
-if importlib.util.find_spec('qdrant_client'):
-    from minix.core.connectors import QdrantConnector
-    from minix.core.repository import QdrantRepository
 from minix.core.connectors import SqlConnector
+from minix.core.conf.builders import kafka_bootstrap_servers
 from minix.core.module import Module
 from minix.core.registry.registry import Registry
-from minix.core.repository import SqlRepository
-from minix.core.repository import RedisRepository
+from minix.core.repository import RedisRepository, SqlRepository
 from minix.core.scheduler import Scheduler
 
 
@@ -61,24 +58,29 @@ class BusinessModule(Module):
                         redis
                     )
                 )
-            elif importlib.util.find_spec('qdrant_client') and issubclass(repository, QdrantRepository):
+            elif importlib.util.find_spec("qdrant_client"):
+                from minix.core.connectors import QdrantConnector
+                from minix.core.repository import QdrantRepository
+
+                if not issubclass(repository, QdrantRepository):
+                    continue
                 if salt is not None:
                     qdrant_connector = Registry().get(QdrantConnector, salt=salt)
                 else:
                     qdrant_connector = Registry().get(QdrantConnector)
                 repo = repository(
-                        self.entities[idx],
-                        qdrant_connector
-                    )
+                    self.entities[idx],
+                    qdrant_connector,
+                )
                 try:
                     loop = asyncio.get_running_loop()
                     asyncio.run_coroutine_threadsafe(repo.create_collection(), loop)
-                except RuntimeError as e:
+                except RuntimeError:
                     asyncio.run(repo.create_collection())
 
                 Registry().register(
                     repository,
-                    repo
+                    repo,
                 )
         return self
 
@@ -137,10 +139,13 @@ class BusinessModule(Module):
             consumer_obj = consumer()
             config = consumer_obj.get_config()
             if config.bootstrap_servers is None:
-                bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS")
-                if bootstrap_servers is None:
-                    raise ValueError("Bootstrap servers must be provided either in the config or as an environment variable")
-                config.bootstrap_servers = [server.strip() for server in bootstrap_servers.split(",")]
+                servers = kafka_bootstrap_servers()
+                if not servers:
+                    raise ValueError(
+                        "Bootstrap servers must be provided either in the consumer "
+                        "config or via KAFKA_BOOTSTRAP_SERVERS / settings"
+                    )
+                config.bootstrap_servers = servers
             consumer_obj.set_config(config)
             api = Registry().get(FastAPI)
             api.add_event_handler(
