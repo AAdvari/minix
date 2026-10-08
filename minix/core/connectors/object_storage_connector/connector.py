@@ -1,20 +1,52 @@
+from __future__ import annotations
+
+import logging
+import warnings
+from typing import Any, BinaryIO, Dict, Optional
+
 import boto3
 from botocore.exceptions import ClientError
-from typing import Optional, BinaryIO, Dict, Any
-import logging
+
 from .config import ObjectStorageConfig
-from minix.core.connectors import Connector
+from minix.core.connectors.connector import Connector
 
 logger = logging.getLogger(__name__)
 
+
 class ObjectStorageConnector(Connector):
     """Connector for object storage operations."""
-    
-    def __init__(self, config: ObjectStorageConfig):
+
+    def __init__(
+        self,
+        config: ObjectStorageConfig | None = None,
+        *,
+        connection: str = "default",
+        settings=None,
+    ):
+        """Create an object-storage connector.
+
+        Prefer ``ObjectStorageConnector(connection=...)`` with
+        ``settings.OBJECT_STORAGES``. Passing an explicit
+        ``ObjectStorageConfig`` is deprecated but still supported for
+        backward compatibility. Registry identity remains the bootstrap **salt**.
+        """
+        self.connection_name = connection
+
+        if config is None:
+            from minix.core.conf.builders import object_storage_config
+
+            config = object_storage_config(settings=settings, connection=connection)
+        else:
+            warnings.warn(
+                "Passing ObjectStorageConfig to ObjectStorageConnector is deprecated; "
+                "use ObjectStorageConnector(connection=...) with settings.OBJECT_STORAGES instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         self.config = config
         self.client = self._create_client()
         self.bucket_name = config.bucket_name
-        
+
     def _create_client(self) -> boto3.client:
         """Create and return an S3 client."""
         return boto3.client(
@@ -25,7 +57,7 @@ class ObjectStorageConnector(Connector):
             use_ssl=self.config.use_ssl,
             verify=self.config.verify_ssl
         )
-    
+
     async def upload_file(self, file_obj: BinaryIO, object_key: str, metadata: Optional[Dict[str, str]] = None) -> bool:
         """Upload a file to object storage."""
         try:
@@ -40,7 +72,7 @@ class ObjectStorageConnector(Connector):
         except ClientError as e:
             logger.error(f"Error uploading file {object_key}: {str(e)}")
             return False
-            
+
     async def download_file(self, object_key: str, file_obj: BinaryIO) -> bool:
         """Download a file from object storage."""
         try:
@@ -75,7 +107,7 @@ class ObjectStorageConnector(Connector):
         except ClientError as e:
             logger.error(f"Error deleting file {object_key}: {str(e)}")
             return False
-            
+
     async def get_file_metadata(self, object_key: str) -> Optional[Dict[str, Any]]:
         """Get metadata for a file."""
         try:
@@ -92,7 +124,7 @@ class ObjectStorageConnector(Connector):
         except ClientError as e:
             logger.error(f"Error getting metadata for file {object_key}: {str(e)}")
             return None
-            
+
     async def list_files(self, prefix: str = "") -> list:
         """List files in the bucket with optional prefix."""
         try:
@@ -104,7 +136,7 @@ class ObjectStorageConnector(Connector):
         except ClientError as e:
             logger.error(f"Error listing files with prefix {prefix}: {str(e)}")
             return []
-            
+
     async def generate_presigned_url(self, object_key: str, expiration: int = 3600) -> Optional[str]:
         """Generate a presigned URL for temporary access to a file."""
         try:
@@ -118,4 +150,4 @@ class ObjectStorageConnector(Connector):
             )
         except ClientError as e:
             logger.error(f"Error generating presigned URL for {object_key}: {str(e)}")
-            return None 
+            return None

@@ -16,26 +16,33 @@ dependencies = [
     "aiokafka (>=0.12.0,<0.13.0)",
     "sqlalchemy (>=2.0.41,<3.0.0)",
     "dotenv (>=0.9.9,<0.10.0)",
-    "pymysql (>=1.1.1,<2.0.0)",
     "celery-redbeat (>= 2.3.2)",
     "authlib (>=1.3,<2.0)",
     "httpx (>=0.27,<0.29)",
+    "typer (>=0.12,<1.0)",
+    "pydantic-settings (>=2.0,<3.0)",
 ]
 
 [project.optional-dependencies]
+postgresql = [
+    "psycopg[binary]>=3.1",
+]
+mysql = [
+    "pymysql>=1.1.1",
+]
 ai = [
     "torch>=2.0",
     "mlflow>=2.0",
+    "loguru>=0.7",
+    "numpy>=1.24",
 ]
 vdb = [
     "qdrant-client>=1.0",
+    "numpy>=1.24",
 ]
 clickhouse = [
     "clickhouse-sqlalchemy>=0.2",
     "clickhouse-driver>=0.2",
-]
-dev = [
-    "typer>=0.12",
 ]
 # The RAG module (minix.core.modules.rag): collections, ingestion, chunking,
 # hybrid BM25 + vector retrieval, LLM reranking, answers with citations.
@@ -43,7 +50,8 @@ dev = [
 # Models are called through LiteLLM, so any provider it supports works — set the
 # provider's API key. At runtime it also needs a PostgreSQL server (full-text
 # keyword search) and a Qdrant server (vectors); PDF ingestion needs the poppler
-# system package (used by pdf2image).
+# system package (used by pdf2image). The PostgreSQL driver is the same one as
+# the `postgresql` extra.
 rag = [
     "langchain-core>=0.3.0",
     "langchain-text-splitters>=0.3.0",
@@ -54,22 +62,28 @@ rag = [
     "pdf2image>=1.17.0",
     "Pillow>=10.0.0",
     "python-multipart>=0.0.9",
-    "psycopg2-binary>=2.9.0",
+    "psycopg[binary]>=3.1",
 ]
-# PostgreSQL driver for SqlConnector(driver="postgresql") — also included in
-# `rag`, which is Postgres-only.
-postgres = [
-    "psycopg2-binary>=2.9.0",
-]
+
+[project.scripts]
+minix = "minix.core.cli.cli:app"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
 
-
 [tool.poetry]
 packages = [{ include = "minix" }]
-
-
-[tool.poetry.scripts]
-minix = "minix.core.cli.cli:app"
+include = [
+    "minix/core/conf/project_template/config.py",
+    "minix/core/conf/project_template/.env.example",
+    "minix/core/conf/project_template/.gitignore",
+    "minix/core/conf/project_template/Dockerfile",
+    "minix/core/conf/project_template/docker-compose.yml",
+    "minix/core/conf/project_template/.dockerignore",
+    "minix/core/conf/project_template/AGENTS.md",
+    "minix/core/conf/project_template/entries/__init__.py",
+    "minix/core/conf/project_template/entries/api.py",
+    "minix/core/conf/project_template/entries/worker.py",
+    "minix/core/conf/project_template/entries/beat.py",
+]

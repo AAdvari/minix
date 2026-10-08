@@ -1,5 +1,6 @@
 from abc import ABC
 from typing import Self, Type, List, Tuple, Dict
+import warnings
 from minix.core.consumer import AsyncConsumer
 from minix.core.controller import Controller
 from minix.core.entity import Entity
@@ -8,6 +9,8 @@ from minix.core.model import Model
 from minix.core.repository import Repository
 from minix.core.scheduler.task import PeriodicTask, Task
 from minix.core.service import Service, BaseService, HelperService
+
+_SENTINEL = object()
 
 
 class Module(Installable, ABC):
@@ -36,31 +39,50 @@ class Module(Installable, ABC):
         entity: Type[Entity],
         repository: Type[Repository],
         service: Type[Service],
-        connector_salt: str | None = None,
+        connection: str | None = None,
         *,
+        connector_salt: str | None = _SENTINEL,  # type: ignore[assignment]
         provides_repository: Type[Repository] | None = None,
         provides_service: Type[Service] | None = None,
     ) -> Self:
         """Register an entity, repository, and service as one binding.
 
-        Prefer this over calling ``add_entity``, ``add_repository``, and
-        ``add_service`` separately so their order cannot drift.
+        ``connection`` is the settings connection name (e.g. ``"analytics"``);
+        ``"default"`` / ``None`` → no Registry salt.
+
+        ``connector_salt`` is deprecated; prefer ``connection=``. When passed
+        it is used as-is (including ``"default"``).
 
         ``provides_repository`` / ``provides_service`` additionally register the
         installed instances under a base type, so a subclass can stand in for a
         base class that other code resolves lazily via ``Registry().get(Base)``.
         """
+        if connector_salt is not _SENTINEL:
+            warnings.warn(
+                "add_binding(..., connector_salt=...) is deprecated; "
+                "use connection=... instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            salt = connector_salt
+        else:
+            salt = None if connection in (None, "default") else connection
         self.entities.append(entity)
-        self.repositories.append((repository, connector_salt, provides_repository))
+        self.repositories.append((repository, salt, provides_repository))
         self.services.append((service, provides_service))
         return self
 
     def add_entity(self, entity: Type[Entity])-> Self:
         """Register a data entity.
 
-        Deprecated: prefer :meth:`add_binding` to register entity, repository,
-        and service together so they stay paired by design.
+        .. deprecated::
+            Prefer :meth:`add_binding` so entity, repository, and service stay paired.
         """
+        warnings.warn(
+            "add_entity() is deprecated; prefer add_binding(entity, repository, service).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.entities.append(entity)
         return self
 
@@ -71,9 +93,14 @@ class Module(Installable, ABC):
     def add_service(self, service: Type[Service], provides: Type[Service] | None = None)-> Self:
         """Register a service, optionally also under the base type `provides`.
 
-        Deprecated: prefer :meth:`add_binding` to register entity, repository,
-        and service together so they stay paired by design.
+        .. deprecated::
+            Prefer :meth:`add_binding` so entity, repository, and service stay paired.
         """
+        warnings.warn(
+            "add_service() is deprecated; prefer add_binding(entity, repository, service).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.services.append((service, provides))
         return self
 
@@ -86,9 +113,14 @@ class Module(Installable, ABC):
         """Register a repository with an optional connector salt, optionally
         also under the base type `provides`.
 
-        Deprecated: prefer :meth:`add_binding` to register entity, repository,
-        and service together so they stay paired by design.
+        .. deprecated::
+            Prefer :meth:`add_binding` so entity, repository, and service stay paired.
         """
+        warnings.warn(
+            "add_repository() is deprecated; prefer add_binding(entity, repository, service, connection=...).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.repositories.append((repository, connector_salt, provides))
         return self
 
@@ -120,13 +152,3 @@ class Module(Installable, ABC):
     def exclude_all_controllers(self)-> Self:
         self.controllers = []
         return self
-
-
-
-
-
-
-
-
-
-

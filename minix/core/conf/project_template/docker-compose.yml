@@ -1,0 +1,208 @@
+x-backend: &backend
+  build: .
+  env_file:
+    - .env
+  environment:
+    DB_HOST: __DB_SERVICE__
+# __BEGIN_MYSQL_SECONDARY__
+    MYSQL_DB_HOST: mysql
+# __END_MYSQL_SECONDARY__
+# __BEGIN_POSTGRESQL_SECONDARY__
+    POSTGRES_DB_HOST: postgres
+# __END_POSTGRESQL_SECONDARY__
+    CELERY_BROKER_URL: redis://redis:6379/0
+    CELERY_RESULT_BACKEND: redis://redis:6379/1
+    REDIS_URL: redis://redis:6379/0
+# __BEGIN_VDB__
+    QDRANT_URL: http://qdrant:6333
+# __END_VDB__
+# __BEGIN_AI__
+    MLFLOW_TRACKING_URL: http://mlflow:5000
+# __END_AI__
+    OBJECT_STORAGE_ENDPOINT_URL: http://minio:9000
+  networks:
+    - backend
+
+services:
+# __BEGIN_POSTGRESQL__
+  postgres:
+    image: postgres:18
+    env_file:
+      - .env
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-minix}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-minix}
+      POSTGRES_DB: ${POSTGRES_DB:-minix}
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    networks:
+      - backend
+
+# __END_POSTGRESQL__
+# __BEGIN_MYSQL__
+  mysql:
+    image: mysql:8.0
+    command: --transaction-isolation=READ-COMMITTED
+    env_file:
+      - .env
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-minix}
+      MYSQL_USER: ${MYSQL_USER:-minix}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-minix}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - backend
+
+# __END_MYSQL__
+  redis:
+    image: redis:latest
+    ports:
+      - "${REDIS_PORT:-__REDIS_PORT__}:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - backend
+
+# __BEGIN_VDB__
+  qdrant:
+    image: qdrant/qdrant
+    ports:
+      - "${QDRANT_PORT:-__QDRANT_PORT__}:6333"
+      - "${QDRANT_GRPC_PORT:-__QDRANT_GRPC_PORT__}:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__HOST: "0.0.0.0"
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:-}
+    networks:
+      - backend
+
+# __END_VDB__
+# __BEGIN_CLICKHOUSE__
+  clickhouse:
+    image: clickhouse/clickhouse-server:24
+    ports:
+      - "${CLICKHOUSE_PORT:-9000}:9000"
+      - "${CLICKHOUSE_HTTP_PORT:-8123}:8123"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    networks:
+      - backend
+
+# __END_CLICKHOUSE__
+# __BEGIN_AI__
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.22.0
+    command: mlflow server --host 0.0.0.0 --port 5000
+    ports:
+      - "${MLFLOW_PORT:-5000}:5000"
+    networks:
+      - backend
+
+# __END_AI__
+  minio:
+    image: minio/minio:latest
+    env_file:
+      - .env
+    ports:
+      - "${OBJECT_STORAGE_PORT:-__OBJECT_STORAGE_PORT__}:9000"
+      - "${OBJECT_STORAGE_CONSOLE_PORT:-__OBJECT_STORAGE_CONSOLE_PORT__}:9001"
+    volumes:
+      - minio-data:/data
+    environment:
+      MINIO_ROOT_USER: ${OBJECT_STORAGE_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${OBJECT_STORAGE_SECRET_KEY:-minioadmin}
+    command: server --console-address ":9001" /data
+    networks:
+      - backend
+
+  app:
+    <<: *backend
+    ports:
+      - "${APP_PORT:-__APP_PORT__}:__APP_PORT__"
+    depends_on:
+# __BEGIN_POSTGRESQL__
+      - postgres
+# __END_POSTGRESQL__
+# __BEGIN_MYSQL__
+      - mysql
+# __END_MYSQL__
+      - redis
+# __BEGIN_VDB__
+      - qdrant
+# __END_VDB__
+# __BEGIN_CLICKHOUSE__
+      - clickhouse
+# __END_CLICKHOUSE__
+# __BEGIN_AI__
+      - mlflow
+# __END_AI__
+      - minio
+    command: >
+      uvicorn entries.api:Api
+      --host 0.0.0.0
+      --port __APP_PORT__
+      --reload
+
+  celery_worker:
+    <<: *backend
+    depends_on:
+# __BEGIN_POSTGRESQL__
+      - postgres
+# __END_POSTGRESQL__
+# __BEGIN_MYSQL__
+      - mysql
+# __END_MYSQL__
+      - redis
+      - app
+    command: >
+      celery -A entries.worker.Worker worker
+      --loglevel=info
+      --hostname=worker@%h
+
+  celery_beat:
+    <<: *backend
+    depends_on:
+# __BEGIN_POSTGRESQL__
+      - postgres
+# __END_POSTGRESQL__
+# __BEGIN_MYSQL__
+      - mysql
+# __END_MYSQL__
+      - redis
+      - app
+    command: >
+      celery -A entries.beat.Beat beat
+      --loglevel=info
+      --scheduler redbeat.RedBeatScheduler
+
+volumes:
+# __BEGIN_POSTGRESQL__
+  postgres-data:
+# __END_POSTGRESQL__
+# __BEGIN_MYSQL__
+  mysql-data:
+# __END_MYSQL__
+  redis-data:
+# __BEGIN_VDB__
+  qdrant_data:
+# __END_VDB__
+# __BEGIN_CLICKHOUSE__
+  clickhouse-data:
+# __END_CLICKHOUSE__
+  minio-data:
+
+networks:
+  backend:
+    driver: bridge
