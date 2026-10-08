@@ -168,6 +168,10 @@ def init(
     """
     Scaffold a Minix project in the current directory.
 
+    Usage::
+
+        minix init APP_NAME
+
     Creates ``config.py`` (pydantic settings), ``.env``, ``.env.example``,
     ``.gitignore``, ``Dockerfile``, ``docker-compose.yml``, ``.dockerignore``,
     and ``entries/`` process entrypoints. Optional ``--*-port`` flags bake

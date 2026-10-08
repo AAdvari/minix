@@ -4,38 +4,74 @@
 **Minix** is a modular Python framework for building backend, AI, and data-driven applications. It provides a clean, layered architecture with built-in support for REST APIs, task scheduling, message queues, and machine learning workflows.
 
 ![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)
-![Version](https://img.shields.io/badge/version-0.1.32-green.svg)
+![Version](https://img.shields.io/badge/version-0.2.1-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey.svg)
 
 ---
 
 ## Table of Contents
 
-- [Key Features](#key-features)
-- [Architecture Overview](#architecture-overview)
-- [Installation](#installation)
-- [Core Concepts](#core-concepts)
-  - [Bootstrap](#bootstrap)
-  - [Modules](#modules)
-  - [Entities](#entities)
-  - [Repositories](#repositories)
-  - [Services](#services)
-  - [Controllers](#controllers)
-  - [Connectors](#connectors)
-  - [Tasks & Scheduling](#tasks--scheduling)
-    - [Async Task](#async-task)
-    - [Periodic Task](#periodic-task)
-    - [Running Tasks Manually](#running-tasks-manually)
-    - [Workflows (DAG Scheduling)](#workflows-dag-scheduling)
-  - [Kafka Consumers](#kafka-consumers)
-  - [ML Models](#ml-models)
-- [Configuration](#configuration)
-- [Extras](#extras)
-- [Registry Usage](#registry-usage)
-- [CLI Commands](#cli-commands)
-- [License](#license)
-- [Contributing](#contributing)
-- [Author](#author)
+- [Minix](#minix)
+  - [Table of Contents](#table-of-contents)
+  - [Key Features](#key-features)
+  - [Architecture Overview](#architecture-overview)
+  - [Installation](#installation)
+    - [Requirements](#requirements)
+    - [Install via pip](#install-via-pip)
+    - [Install from source (development)](#install-from-source-development)
+  - [Core Concepts](#core-concepts)
+    - [Bootstrap](#bootstrap)
+    - [Modules](#modules)
+    - [Entities](#entities)
+      - [SQL Entity](#sql-entity)
+      - [Qdrant Entity (Vector DB)](#qdrant-entity-vector-db)
+      - [Redis Entity](#redis-entity)
+    - [Repositories](#repositories)
+      - [SQL Repository](#sql-repository)
+      - [Qdrant Repository](#qdrant-repository)
+    - [Services](#services)
+    - [Controllers](#controllers)
+    - [Connectors](#connectors)
+      - [SQL Connector (MySQL/ClickHouse)](#sql-connector-mysqlclickhouse)
+      - [Qdrant Connector](#qdrant-connector)
+      - [Object Storage Connector (S3-compatible)](#object-storage-connector-s3-compatible)
+    - [Tasks \& Scheduling](#tasks--scheduling)
+      - [Async Task](#async-task)
+      - [Periodic Task](#periodic-task)
+      - [Running Tasks Manually](#running-tasks-manually)
+      - [Workflows (DAG Scheduling)](#workflows-dag-scheduling)
+        - [Creating a Workflow](#creating-a-workflow)
+        - [Dependency Result Passing](#dependency-result-passing)
+        - [Running the Entire Workflow](#running-the-entire-workflow)
+        - [Running a Specific Target Node](#running-a-specific-target-node)
+        - [Workflow Execution Guarantees](#workflow-execution-guarantees)
+    - [Kafka Consumers](#kafka-consumers)
+    - [ML Models](#ml-models)
+      - [Base Model](#base-model)
+      - [Embedding Model](#embedding-model)
+      - [MLflow Model (requires `ai` extra)](#mlflow-model-requires-ai-extra)
+  - [Configuration](#configuration)
+    - [Project config](#project-config)
+    - [Connectors from config](#connectors-from-config)
+    - [Environment overrides](#environment-overrides)
+  - [Extras](#extras)
+    - [AI Capabilities](#ai-capabilities)
+    - [ClickHouse Support](#clickhouse-support)
+    - [Install All Extras](#install-all-extras)
+  - [Registry Usage](#registry-usage)
+  - [CLI Commands](#cli-commands)
+    - [Quick map](#quick-map)
+    - [Global options](#global-options)
+    - [`minix init`](#minix-init)
+    - [`minix add module`](#minix-add-module)
+      - [SQL binding (all or none)](#sql-binding-all-or-none)
+      - [Flags](#flags)
+      - [Naming rules](#naming-rules)
+      - [Module layout](#module-layout)
+      - [After scaffolding](#after-scaffolding)
+  - [License](#license)
+  - [Contributing](#contributing)
+  - [Author](#author)
 
 ---
 
@@ -137,11 +173,10 @@ class ProductModule(BusinessModule):
 ```
 
 **Module Methods:**
-- `add_binding(entity, repository, service, connection=None)` - Register a paired entity / repository / service (preferred)
-- `add_entity(entity)` - Register a data entity (**deprecated**, use `add_binding`)
-- `add_repository(repository, connector_salt)` - Register a repository with optional connector (**deprecated**, use `add_binding`)
-- `add_service(service)` - Register a service (**deprecated**, use `add_binding`)
+- `add_binding(entity, repository, service, connection=None)` - Register entity + repository + service together (required unit; do not split them)
+- `add_entity` / `add_repository` / `add_service` - **Deprecated**; use `add_binding` instead
 - `add_controller(controller)` - Register an API controller
+- `add_helper_service(helper)` - Register a helper service
 - `add_task(task)` - Register an async task
 - `add_periodic_task(periodic_task)` - Register a scheduled task
 - `add_consumer(consumer)` - Register a Kafka consumer
@@ -654,12 +689,22 @@ connector = Registry().get(SqlConnector, salt="analytics")
 
 ## CLI Commands
 
-Install Minix, then use the `minix` entry point:
+Install Minix, then use the `minix` entry point. Prefer these commands over
+hand-writing project or module boilerplate.
 
 ```bash
 minix --help
-minix <command> --help
+minix init --help
+minix add module --help
 ```
+
+### Quick map
+
+| Goal | Command |
+|------|---------|
+| New project in cwd | `minix init APP_NAME` |
+| New feature module | `minix add module MODULE_NAME` |
+| Version | `minix -v` / `minix --version` |
 
 ### Global options
 
@@ -707,6 +752,12 @@ minix init APP_NAME [OPTIONS]
 | `.dockerignore` | Build context excludes |
 | `entries/` | `api.py`, `worker.py`, `beat.py` process entrypoints |
 
+**App wiring after init** (settings, not legacy `app_connectors.py` / `app_modules.py`):
+
+- Connectors: `DATABASES`, `OBJECT_STORAGES`, `QDRANT_CONNECTIONS`, … in `config.py`
+- Modules: `INSTALLED_MODULES` list of dotted paths
+- Boot: `bootstrap_from_settings()` in `entries/api.py`
+
 **Behavior:**
 
 - Fails with exit code `1` if `config.py` or `settings.py` already exists.
@@ -719,6 +770,7 @@ minix init APP_NAME [OPTIONS]
   Override with `--extras vdb,clickhouse,ai` or use `--no-extras` for a minimal stack.
 - **Version pin:** The Dockerfile uses a compatible release on the installed minor
   (e.g. ``minix~=0.2.2`` → latest ``0.2.x`` ≥ ``0.2.2``, not ``0.3``).
+  Prefer letting `minix init` manage the pin instead of hand-editing the Dockerfile.
 
 ```bash
 minix init my_app
@@ -727,6 +779,115 @@ pip install "minix[vdb]"
 minix init my_app --extras vdb
 minix init my_app --no-extras
 ```
+
+### `minix add module`
+
+Scaffold a feature module under `src/modules/<name>/`.
+
+```bash
+minix add module MODULE_NAME [OPTIONS]
+```
+
+**Default stack:** entity + repository + service + controller.
+The SQL trio is wired with a single `add_binding(...)` in `module.py`.
+Tasks / helpers / consumers / periodic tasks are **opt-in**.
+
+| Piece | Example for `orders` |
+|-------|----------------------|
+| Entity | `Order` → `entities/order_entity.py` |
+| Repository | `OrderSqlRepository` |
+| Service | `OrderSqlService` |
+| Controller | `OrderController` |
+| Wiring | `module.py` → `.add_binding(...)` + `.add_controller(...)` |
+| Package export | `OrdersModule` from `__init__.py` |
+
+#### SQL binding (all or none)
+
+Entity, repository, and service are **one unit**. The CLI never generates a
+partial binding:
+
+- Default: all three are created.
+- `--no-binding`: skip all three.
+- `--entity=` / `--repository=` / `--service=` (or `-e` / `-r` / `-s`) only
+  rename; missing pieces are still filled so the binding stays complete.
+- Combining `--no-binding` with any of those flags is an error.
+- There are no `--no-entity` / `--no-repository` / `--no-service` flags.
+
+#### Flags
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--entity[=Name]` | `-e` | on (with binding) | Rename the binding entity (`Order` for `orders`) |
+| `--repository[=Name]` | `-r` | on (with binding) | Rename the binding repository |
+| `--service[=Name]` | `-s` | on (with binding) | Rename the binding service |
+| `--controller[=Name]` | `-c` | on | HTTP controller |
+| `--task[=Name]` | `-t` | off | Async Celery `Task` |
+| `--helper[=Name]` | `-H` | off | `HelperService` |
+| `--consumer[=Name]` | | off | Kafka `AsyncConsumer` |
+| `--periodic[=Name]` | `-p` | off | `PeriodicTask` |
+| `--all` | `-a` | off | Default stack + task, helper, consumer, periodic |
+| `--no-binding` | | off | Skip entity + repository + service together |
+| `--no-controller` | | off | Skip controller only |
+| `--path DIR` | | `src/modules/<name>` | Package directory |
+| `--force` | `-f` | off | Overwrite existing files |
+| `--register` / `--no-register` | | register | Append to `config.py` `INSTALLED_MODULES` |
+
+#### Naming rules
+
+- Long flags accept an optional value with `=`: `--controller=ShopController`, `--task=ShipOrder`.
+- Short flags (`-c`, `-t`, …) are **presence-only** — do not pass a separate value after them.
+- Safe: `minix add module orders -t --no-register`
+- Avoid: `minix add module orders -t ShipOrder` (use `--task=ShipOrder`)
+
+```bash
+# Default CRUD/API stack + auto-register in config.py
+minix add module orders
+
+# Custom class names (binding still complete)
+minix add module orders --entity=ShopOrder --controller=ShopController
+
+# Background task add-on
+minix add module orders -t
+minix add module orders --task=FulfillOrder -H
+
+# Everything
+minix add module orders -a
+
+# Worker-oriented: no HTTP controller
+minix add module orders --no-controller -t
+
+# No SQL binding (e.g. helper/consumer-only style module)
+minix add module orders --no-binding -H --consumer=OrderEventsConsumer
+```
+
+#### Module layout
+
+```
+src/modules/<name>/
+  __init__.py          # exports <Name>Module
+  module.py            # BusinessModule + add_binding / add_*
+  entities/            # present when binding is on
+  repositories/
+  services/
+  controllers/         # optional
+  tasks/               # optional (Task + PeriodicTask)
+  consumers/           # optional
+```
+
+#### After scaffolding
+
+1. Confirm `INSTALLED_MODULES` contains e.g. `"src.modules.orders.OrdersModule"`.
+2. Implement fields on the entity; add an Alembic migration if the app uses one.
+3. Expand service / controller as needed.
+4. Restart API / worker.
+
+```python
+from src.modules.orders import OrdersModule
+```
+
+Cross-module links: put the FK on the owning entity and resolve the other side with
+`Registry().get(OtherService)` in services (do not merge unrelated entities into one
+module only because they relate).
 
 ---
 
@@ -747,3 +908,4 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 **AmirHossein Advari** - [amiradvari@gmail.com](mailto:amiradvari@gmail.com) \
 **Shirin Dehghani** - [shirin.dehghani1996@gmail.com](mailto:shirin.dehghani1996@gmail.com) \
 **Parsa Mohammadpour** - [parsa.mohammadpour01@gmail.com](mailto:parsa.mohammadpour01@gmail.com)
+**Emad Sudani** - [sudani.emad@gmail.com](mailto:sudani.emad@gmail.com)
