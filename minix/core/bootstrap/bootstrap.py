@@ -4,7 +4,6 @@ import os
 import warnings
 from typing import Sequence, Tuple
 
-import pymysql
 import dotenv
 
 from minix.core.connectors import Connector
@@ -20,7 +19,13 @@ from minix.core.conf.builders import (
     scheduler_config,
 )
 
-pymysql.install_as_MySQLdb()
+try:
+    import pymysql
+
+    pymysql.install_as_MySQLdb()
+except ImportError:
+    pass
+
 dotenv.load_dotenv()
 
 _SENTINEL = object()

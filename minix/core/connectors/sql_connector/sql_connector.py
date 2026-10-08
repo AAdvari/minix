@@ -1,7 +1,16 @@
-from sqlalchemy.orm import sessionmaker, scoped_session
+from contextlib import contextmanager
+from typing import Iterator
+
+from sqlalchemy.orm import Session, sessionmaker, scoped_session
 from sqlalchemy import create_engine, text
 import warnings
 from minix.core.connectors.connector import Connector
+from minix.core.connectors.sql_connector.transaction import (
+    TransactionalSessionProxy,
+    active_session,
+    in_transaction as _in_transaction,
+    transaction_scope,
+)
 
 class SqlConnectorConfig:
     def __init__(
@@ -123,7 +132,7 @@ class SqlConnector(Connector):
         self.host = cfg.host
         self.port = cfg.port
         self.database = cfg.database
-        self.driver = cfg.driver
+        self.driver = self.normalize_driver(cfg.driver)
 
         connect_args = self._build_connect_args(cfg)
 
@@ -136,7 +145,7 @@ class SqlConnector(Connector):
             connect_args=connect_args,
         )
 
-        if self.driver == 'clickhouse' and cfg.max_execution_time:
+        if self.driver == "clickhouse" and cfg.max_execution_time:
             with self.engine.connect() as conn:
                 # applies for the current connection; pool_pre_ping may refresh conns,
                 # so also set it at the start of work units when you open sessions.
@@ -146,51 +155,117 @@ class SqlConnector(Connector):
             sessionmaker(bind=self.engine, autocommit=False, autoflush=False)
         )
 
+    @staticmethod
+    def normalize_driver(driver: str | None) -> str:
+        """Map aliases to a canonical SQLAlchemy driver name."""
+        if not driver:
+            raise Exception("Driver not supported")
+        key = str(driver).strip().lower()
+        aliases = {
+            "postgresql": "postgresql",
+            "postgres": "postgresql",
+            "pgsql": "postgresql",
+            "mysql": "mysql",
+            "clickhouse": "clickhouse",
+        }
+        if key not in aliases:
+            raise Exception(f"Driver not supported: {driver!r}")
+        return aliases[key]
+
     def _build_connect_args(self, cfg: SqlConnectorConfig) -> dict:
-        if self.driver == 'mysql':
+        driver = self.normalize_driver(self.driver)
+        if driver == "postgresql":
             return {
-                'connect_timeout': cfg.connect_timeout,
-                'read_timeout': cfg.read_timeout,
-                'write_timeout': cfg.write_timeout,
-                # socket keepalive is enabled by default at OS level, but if you use
-                # PyMySQL<1.1 there’s no explicit switch; rely on OS sysctls.
+                "connect_timeout": cfg.connect_timeout,
             }
 
-        if self.driver == 'clickhouse':
+        if driver == "mysql":
+            return {
+                "connect_timeout": cfg.connect_timeout,
+                "read_timeout": cfg.read_timeout,
+                "write_timeout": cfg.write_timeout,
+                # socket keepalive is enabled by default at OS level, but if you use
+                # PyMySQL<1.1 there's no explicit switch; rely on OS sysctls.
+            }
+
+        if driver == "clickhouse":
             args = {
-                'connect_timeout': cfg.connect_timeout,
-                'send_receive_timeout': cfg.send_receive_timeout,
-                'compression': cfg.compression,
+                "connect_timeout": cfg.connect_timeout,
+                "send_receive_timeout": cfg.send_receive_timeout,
+                "compression": cfg.compression,
             }
             try:
                 if cfg.tcp_keepalive:
-                    args['tcp_keepalive'] = True
+                    args["tcp_keepalive"] = True
             except Exception:
                 pass
             return args
 
-        raise Exception('Driver not supported')
+        raise Exception("Driver not supported")
 
-    def get_session(self):
-        if self.driver == 'clickhouse':
+    def open_session(self) -> Session:
+        """Always open a new SQLAlchemy session (ignores any active transaction)."""
+        if self.normalize_driver(self.driver) == "clickhouse":
             conn = self.engine.connect()
             conn.execute(text("SET send_logs_level = 'warning'"))  # optional
             return self.Session(bind=conn)
         return self.Session()
 
+    def get_session(self) -> Session | TransactionalSessionProxy:
+        """Return the active transaction session when present; otherwise a new one.
+
+        Inside ``transaction()``, the returned proxy maps ``commit()`` → ``flush()``
+        and ignores ``close()``, so repositories across modules share one unit of work.
+        """
+        shared = active_session(self)
+        if shared is not None:
+            return TransactionalSessionProxy(shared)
+        return self.open_session()
+
+    def in_transaction(self) -> bool:
+        """True when this connector is inside ``transaction()`` on the current context."""
+        return _in_transaction(self)
+
+    @contextmanager
+    def transaction(self) -> Iterator[Session]:
+        """Run all repository work on this connector in a single DB transaction.
+
+        Nested ``transaction()`` calls on the same connector use SAVEPOINTs.
+        On success the outermost block commits once; on error it rolls back.
+
+        Prefer the short form ``sql_transaction()`` from
+        ``minix.core.connectors`` when using the default registry connector.
+
+        Example::
+
+            with sql_transaction():
+                order_repo.save(order)
+                payment_repo.save(payment)
+        """
+        with transaction_scope(self) as session:
+            yield session
+
     def get_engine(self):
         return self.engine
 
     def get_connection_string(self, driver: str) -> str:
-        if driver == 'mysql':
+        normalized = self.normalize_driver(driver)
+        if normalized == "postgresql":
+            return self.get_postgresql_connection_string()
+        if normalized == "mysql":
             return self.get_mysql_connection_string()
-        elif driver == 'clickhouse':
+        if normalized == "clickhouse":
             return self.clickhouse_connection_string()
-        else:
-            raise Exception('Driver not supported')
+        raise Exception(f"Driver not supported: {driver!r}")
+
+    def get_postgresql_connection_string(self) -> str:
+        return (
+            f"postgresql+psycopg://{self.username}:{self.password}"
+            f"@{self.host}:{self.port}/{self.database}"
+        )
 
     def get_mysql_connection_string(self) -> str:
-        return f'mysql+pymysql://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}'
+        return f"mysql+pymysql://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}"
 
     def clickhouse_connection_string(self) -> str:
-        return f'clickhouse+native://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}'
+        return f"clickhouse+native://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}"

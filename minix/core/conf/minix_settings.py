@@ -43,12 +43,12 @@ def exports_from_config(cfg: Any) -> dict[str, Any]:
         cfg,
         "databases",
         flat_default={
-            "user": _get(cfg, "db_user", "root"),
-            "password": _get(cfg, "db_pass", ""),
+            "user": _get(cfg, "db_user", "minix"),
+            "password": _get(cfg, "db_pass", "minix"),
             "host": _get(cfg, "db_host", "localhost"),
-            "port": _get(cfg, "db_port", 3306),
+            "port": _get(cfg, "db_port", 5432),
             "name": _get(cfg, "db_database", "minix"),
-            "driver": _get(cfg, "db_driver", "mysql"),
+            "driver": _get(cfg, "db_driver", "postgresql"),
         },
         extra_attr="extra_databases",
     )

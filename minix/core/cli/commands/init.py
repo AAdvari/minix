@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Optional
 
 import typer
 
+from minix.core.cli.commands.init_prompts import (
+    primary_sql_driver,
+    prompt_sql_drivers,
+    sql_driver_defaults,
+)
 from minix.core.cli.commands.init_scaffold import (
     apply_feature_blocks,
     minix_pip_install_spec,
@@ -17,7 +23,6 @@ _SETTINGS_MODULE_LINE = "MINIX_SETTINGS_MODULE=config"
 
 _DEFAULT_PORTS = {
     "APP_PORT": 8000,
-    "DB_PORT": 3306,
     "REDIS_PORT": 6379,
     "QDRANT_PORT": 6333,
     "QDRANT_GRPC_PORT": 6334,
@@ -26,26 +31,25 @@ _DEFAULT_PORTS = {
     "MLFLOW_PORT": 5000,
 }
 
-# Relative paths under the template dir → destination under the project root.
 _OPTIONAL_FILES = (
     ".env.example",
     ".gitignore",
     "Dockerfile",
     "docker-compose.yml",
     ".dockerignore",
+    "AGENTS.md",
     "entries/__init__.py",
     "entries/api.py",
     "entries/worker.py",
     "entries/beat.py",
 )
 
-
 _ENV_EXAMPLE_HEADER = (
     "# Copy to `.env` and adjust. Values fall back to defaults in config.py.\n\n"
 )
 
 
-def _port_option(name: str, default: int, help_text: str):
+def _port_option(name: str, default: int | None, help_text: str):
     return typer.Option(
         default,
         f"--{name.replace('_', '-').lower()}",
@@ -69,10 +73,8 @@ def _env_file_content(example_content: str) -> str:
     """``.env`` is the example without the copy-instruction header."""
     if example_content.startswith(_ENV_EXAMPLE_HEADER):
         return example_content[len(_ENV_EXAMPLE_HEADER) :]
-    # Fallback: drop a leading "# Copy to..." line if present.
     lines = example_content.splitlines(keepends=True)
     if lines and lines[0].lstrip().startswith("# Copy to"):
-        # Also drop the blank line that usually follows the header.
         rest = lines[1:]
         if rest and rest[0].strip() == "":
             rest = rest[1:]
@@ -90,20 +92,31 @@ def _write_if_missing(root: Path, relative: str, content: str, created: list[str
     created.append(relative)
 
 
+def _sql_features(drivers: list[str]) -> set[str]:
+    """Template feature flags for selected SQL engines (+ secondary connection)."""
+    features = set(drivers)
+    primary = primary_sql_driver(drivers)
+    for driver in drivers:
+        if driver != primary:
+            features.add(f"{driver}_secondary")
+    return features
+
+
 def _render(
     content: str,
     *,
     app_name: str,
     ports: dict[str, int],
-    extras: set[str],
+    features: set[str],
+    placeholders: dict[str, str],
 ) -> str:
-    rendered = apply_feature_blocks(content, extras)
+    rendered = apply_feature_blocks(content, features)
     rendered = rendered.replace("my_project", app_name)
-    rendered = rendered.replace("__MINIX_PIP_SPEC__", minix_pip_install_spec(extras))
+    rendered = rendered.replace("__MINIX_PIP_SPEC__", minix_pip_install_spec(features))
+    for key, value in placeholders.items():
+        rendered = rendered.replace(f"__{key}__", value)
     for key, value in ports.items():
         rendered = rendered.replace(f"__{key}__", str(value))
-    # Dockerfile uses a literal EXPOSE 8000 so IDE validators accept the
-    # template; bake the chosen APP_PORT when scaffolding.
     app_port = ports.get("APP_PORT")
     if app_port is not None and "\nEXPOSE 8000\n" in rendered:
         rendered = rendered.replace("\nEXPOSE 8000\n", f"\nEXPOSE {app_port}\n", 1)
@@ -120,10 +133,19 @@ def init(
         _DEFAULT_PORTS["APP_PORT"],
         "Host/container port for the API (Dockerfile EXPOSE, compose app service).",
     ),
-    db_port: int = _port_option(
+    db_driver: Optional[str] = typer.Option(
+        None,
+        "--db-driver",
+        help=(
+            "SQL database(s), comma-separated: postgresql (recommended) and/or mysql. "
+            "Prompted interactively if omitted."
+        ),
+    ),
+    db_port: Optional[int] = _port_option(
         "DB_PORT",
-        _DEFAULT_PORTS["DB_PORT"],
-        "Host port mapped to MySQL (container stays on 3306).",
+        None,
+        "Host port for the primary SQL database "
+        "(default: 5432 for PostgreSQL, 3306 for MySQL).",
     ),
     redis_port: int = _port_option(
         "REDIS_PORT",
@@ -155,27 +177,28 @@ def init(
         "--extras",
         help=(
             "Comma-separated Minix PyPI extras for Docker and compose "
-            "(vdb, clickhouse, ai). Default: infer from packages installed "
-            "in this environment."
+            "(postgresql, mysql, vdb, clickhouse, ai). "
+            "SQL extras are also set from --db-driver / the SQL prompt. "
+            "Default for non-SQL extras: infer from this environment."
         ),
     ),
     no_extras: bool = typer.Option(
         False,
         "--no-extras",
-        help="Minimal scaffold: base minix only, no optional compose services.",
+        help="Skip auto-detected non-SQL extras (SQL extras from --db-driver still apply).",
     ),
 ):
     """
     Scaffold a Minix project in the current directory.
 
-    Creates ``config.py`` (pydantic settings), ``.env``, ``.env.example``,
-    ``.gitignore``, ``Dockerfile``, ``docker-compose.yml``, ``.dockerignore``,
-    and ``entries/`` process entrypoints. Optional ``--*-port`` flags bake
-    defaults into Docker / env files. Docker install spec and optional services
-    follow detected or explicit Minix extras (``[vdb]``, ``[clickhouse]``,
-    ``[ai]``). Existing optional files are left intact (``.env`` only gains
-    ``MINIX_SETTINGS_MODULE`` when missing).
-    Does nothing if ``config.py`` or ``settings.py`` already exists.
+    Usage::
+
+        minix init APP_NAME
+
+    Asks which SQL database(s) to use (PostgreSQL recommended/default; multi-select
+    allowed), then creates ``config.py``, ``.env``, Docker files, and ``entries/``.
+    Only the selected SQL driver extras are installed in Docker
+    (``minix[postgresql]``, ``minix[mysql]``, or both).
     """
     root = Path.cwd()
     if (root / "config.py").exists() or (root / "settings.py").exists():
@@ -188,9 +211,20 @@ def init(
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
 
+    # SQL engines come from the prompt / --db-driver, not from ambient installs.
+    minix_extras -= {"postgresql", "mysql"}
+
+    drivers = prompt_sql_drivers(explicit=db_driver)
+    primary = primary_sql_driver(drivers)
+    primary_meta = sql_driver_defaults(primary)
+    resolved_db_port = int(db_port if db_port is not None else primary_meta["port"])
+
+    sql_features = _sql_features(drivers)
+    features = set(minix_extras) | sql_features
+
     ports = {
         "APP_PORT": app_port,
-        "DB_PORT": db_port,
+        "DB_PORT": resolved_db_port,
         "REDIS_PORT": redis_port,
         "QDRANT_PORT": qdrant_port,
         "QDRANT_GRPC_PORT": qdrant_grpc_port,
@@ -199,7 +233,26 @@ def init(
         "MLFLOW_PORT": _DEFAULT_PORTS["MLFLOW_PORT"],
     }
 
-    render_kw = dict(app_name=app_name, ports=ports, extras=minix_extras)
+    placeholders = {
+        "DB_DRIVER": primary,
+        "DB_USER": str(primary_meta["user"]),
+        "DB_SERVICE": str(primary_meta["service"]),
+        "POSTGRES_PORT": str(
+            resolved_db_port if primary == "postgresql" else sql_driver_defaults("postgresql")["port"]
+        ),
+        "POSTGRES_USER": "minix",
+        "MYSQL_PORT": str(
+            resolved_db_port if primary == "mysql" else sql_driver_defaults("mysql")["port"]
+        ),
+        "MYSQL_USER": "minix",
+    }
+
+    render_kw = dict(
+        app_name=app_name,
+        ports=ports,
+        features=features,
+        placeholders=placeholders,
+    )
 
     config = _render((_TEMPLATE_DIR / "config.py").read_text(), **render_kw)
     env_example = _render((_TEMPLATE_DIR / ".env.example").read_text(), **render_kw)
@@ -226,8 +279,9 @@ def init(
         _write_if_missing(root, relative, content, created)
 
     port_summary = ", ".join(f"{k}={v}" for k, v in ports.items())
-    extras_label = minix_pip_install_spec(minix_extras)
+    extras_label = minix_pip_install_spec(features)
+    db_label = "+".join(drivers)
     typer.echo(
-        f"Initialized (APP_NAME={app_name}; pip={extras_label}; {port_summary}); "
-        f"wrote: {', '.join(created)}"
+        f"Initialized (APP_NAME={app_name}; db={db_label}; primary={primary}; "
+        f"pip={extras_label}; {port_summary}); wrote: {', '.join(created)}"
     )

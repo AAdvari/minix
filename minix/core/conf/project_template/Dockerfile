@@ -5,8 +5,13 @@ WORKDIR /app
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         build-essential \
-        default-libmysqlclient-dev \
         pkg-config \
+# __BEGIN_POSTGRESQL__
+        libpq-dev \
+# __END_POSTGRESQL__
+# __BEGIN_MYSQL__
+        default-libmysqlclient-dev \
+# __END_MYSQL__
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --upgrade pip && pip install "__MINIX_PIP_SPEC__"
