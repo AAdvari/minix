@@ -1,7 +1,16 @@
-from sqlalchemy.orm import sessionmaker, scoped_session
+from contextlib import contextmanager
+from typing import Iterator
+
+from sqlalchemy.orm import Session, sessionmaker, scoped_session
 from sqlalchemy import create_engine, text
 import warnings
 from minix.core.connectors.connector import Connector
+from minix.core.connectors.sql_connector.transaction import (
+    TransactionalSessionProxy,
+    active_session,
+    in_transaction as _in_transaction,
+    transaction_scope,
+)
 
 class SqlConnectorConfig:
     def __init__(
@@ -194,12 +203,47 @@ class SqlConnector(Connector):
 
         raise Exception("Driver not supported")
 
-    def get_session(self):
+    def open_session(self) -> Session:
+        """Always open a new SQLAlchemy session (ignores any active transaction)."""
         if self.normalize_driver(self.driver) == "clickhouse":
             conn = self.engine.connect()
             conn.execute(text("SET send_logs_level = 'warning'"))  # optional
             return self.Session(bind=conn)
         return self.Session()
+
+    def get_session(self) -> Session | TransactionalSessionProxy:
+        """Return the active transaction session when present; otherwise a new one.
+
+        Inside ``transaction()``, the returned proxy maps ``commit()`` → ``flush()``
+        and ignores ``close()``, so repositories across modules share one unit of work.
+        """
+        shared = active_session(self)
+        if shared is not None:
+            return TransactionalSessionProxy(shared)
+        return self.open_session()
+
+    def in_transaction(self) -> bool:
+        """True when this connector is inside ``transaction()`` on the current context."""
+        return _in_transaction(self)
+
+    @contextmanager
+    def transaction(self) -> Iterator[Session]:
+        """Run all repository work on this connector in a single DB transaction.
+
+        Nested ``transaction()`` calls on the same connector use SAVEPOINTs.
+        On success the outermost block commits once; on error it rolls back.
+
+        Prefer the short form ``sql_transaction()`` from
+        ``minix.core.connectors`` when using the default registry connector.
+
+        Example::
+
+            with sql_transaction():
+                order_repo.save(order)
+                payment_repo.save(payment)
+        """
+        with transaction_scope(self) as session:
+            yield session
 
     def get_engine(self):
         return self.engine

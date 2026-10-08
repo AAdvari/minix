@@ -37,6 +37,7 @@ _OPTIONAL_FILES = (
     "Dockerfile",
     "docker-compose.yml",
     ".dockerignore",
+    "AGENTS.md",
     "entries/__init__.py",
     "entries/api.py",
     "entries/worker.py",

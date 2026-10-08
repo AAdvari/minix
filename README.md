@@ -249,6 +249,30 @@ class UserRepository(SqlRepository[UserEntity]):
 - `update(entity)` - Update an entity
 - `delete(entity)` - Delete an entity
 
+**Cross-module transactions** (one session, one commit):
+
+By default each repository call opens its own session and commits. Wrap related
+writes in `sql_transaction()` so every repository on that connector shares one
+session until the block exits:
+
+```python
+from minix.core.connectors import sql_transaction
+from minix.core.registry import Registry
+
+with sql_transaction():
+    Registry().get(OrderSqlRepository).save(order)
+    Registry().get(PaymentSqlRepository).save(payment)
+# committed once here; any exception rolls back all work in the block
+
+with sql_transaction("mysql"):  # named DATABASES entry
+    ...
+```
+
+Equivalent long form: `Registry().get(SqlConnector).transaction()`.
+Nested calls on the same connector use SAVEPOINTs. Custom repository methods
+that call `session.commit()` still join the outer unit (`commit` becomes
+`flush` while the transaction is active).
+
 #### Qdrant Repository
 
 ```python
@@ -787,6 +811,7 @@ installs the engines you selected.
 | `Dockerfile` | App image (`pip install "minix~=X.Y.Z"` / extras from PyPI) |
 | `docker-compose.yml` | PostgreSQL or MySQL, Redis, MinIO, API, Celery; optional Qdrant / ClickHouse / MLflow |
 | `.dockerignore` | Build context excludes |
+| `AGENTS.md` | CLI guide for AI coding agents (prefer `minix` over hand-scaffolding) |
 | `entries/` | `api.py`, `worker.py`, `beat.py` process entrypoints |
 
 **App wiring after init** (settings, not legacy `app_connectors.py` / `app_modules.py`):
@@ -808,8 +833,9 @@ installs the engines you selected.
 - **Optional extras:** Non-SQL extras can still be inferred from the current
   environment (e.g. `minix[vdb]`). Override with `--extras …` or `--no-extras`.
 - **Version pin:** The Dockerfile uses a compatible release on the installed minor
-  (e.g. ``minix~=0.2.2`` → latest ``0.2.x`` ≥ ``0.2.2``, not ``0.3``).
-  Prefer letting `minix init` manage the pin instead of hand-editing the Dockerfile.
+  (e.g. ``minix~=0.2.3`` → latest ``0.2.x`` ≥ ``0.2.3``, not ``0.3``), capped to
+  the newest version **published on PyPI** so a local unreleased build cannot
+  break `docker compose build`. Prefer letting `minix init` manage the pin.
 
 ```bash
 minix init my_app

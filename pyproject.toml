@@ -61,6 +61,7 @@ include = [
     "minix/core/conf/project_template/Dockerfile",
     "minix/core/conf/project_template/docker-compose.yml",
     "minix/core/conf/project_template/.dockerignore",
+    "minix/core/conf/project_template/AGENTS.md",
     "minix/core/conf/project_template/entries/__init__.py",
     "minix/core/conf/project_template/entries/api.py",
     "minix/core/conf/project_template/entries/worker.py",
