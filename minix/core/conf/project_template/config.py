@@ -33,13 +33,33 @@ class Settings(BaseSettings):
     databases: dict[str, dict[str, Any]] = Field(
         default_factory=lambda: {
             "default": {
-                "user": env("DB_USER", "root"),
-                "password": env("DB_PASS", ""),
+                "user": env("DB_USER", "__DB_USER__"),
+                "password": env("DB_PASS", "minix"),
                 "host": env("DB_HOST", "localhost"),
                 "port": env("DB_PORT", int("__DB_PORT__")),
                 "name": env("DB_DATABASE", "minix"),
-                "driver": env("DB_DRIVER", "mysql"),
+                "driver": env("DB_DRIVER", "__DB_DRIVER__"),
             },
+# __BEGIN_MYSQL_SECONDARY__
+            "mysql": {
+                "user": env("MYSQL_DB_USER", "minix"),
+                "password": env("MYSQL_DB_PASS", "minix"),
+                "host": env("MYSQL_DB_HOST", "localhost"),
+                "port": env("MYSQL_DB_PORT", 3306),
+                "name": env("MYSQL_DB_DATABASE", "minix"),
+                "driver": "mysql",
+            },
+# __END_MYSQL_SECONDARY__
+# __BEGIN_POSTGRESQL_SECONDARY__
+            "postgresql": {
+                "user": env("POSTGRES_DB_USER", "minix"),
+                "password": env("POSTGRES_DB_PASS", "minix"),
+                "host": env("POSTGRES_DB_HOST", "localhost"),
+                "port": env("POSTGRES_DB_PORT", 5432),
+                "name": env("POSTGRES_DB_DATABASE", "minix"),
+                "driver": "postgresql",
+            },
+# __END_POSTGRESQL_SECONDARY__
 # __BEGIN_CLICKHOUSE__
             "clickhouse": {
                 "user": env("CLICKHOUSE_USER", "default"),
@@ -50,14 +70,6 @@ class Settings(BaseSettings):
                 "driver": "clickhouse",
             },
 # __END_CLICKHOUSE__
-            # "analytics": {
-            #     "user": env("ANALYTICS_DB_USER", "root"),
-            #     "password": env("ANALYTICS_DB_PASS", ""),
-            #     "host": env("ANALYTICS_DB_HOST", "localhost"),
-            #     "port": env("ANALYTICS_DB_PORT", 3306),
-            #     "name": env("ANALYTICS_DB_DATABASE", "analytics"),
-            #     "driver": env("ANALYTICS_DB_DRIVER", "mysql"),
-            # },
         }
     )
 

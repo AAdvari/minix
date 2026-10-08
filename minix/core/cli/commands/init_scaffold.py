@@ -6,8 +6,17 @@ import importlib.util
 import re
 from typing import Iterable
 
-VALID_MINIX_EXTRAS = frozenset({"vdb", "clickhouse", "ai"})
-_EXTRA_ORDER = ("vdb", "clickhouse", "ai")
+VALID_MINIX_EXTRAS = frozenset({"postgresql", "mysql", "vdb", "clickhouse", "ai"})
+_EXTRA_ORDER = ("postgresql", "mysql", "vdb", "clickhouse", "ai")
+# Template feature blocks may use shorter aliases (e.g. BEGIN_POSTGRES).
+_FEATURE_TO_PIP_EXTRA = {
+    "postgresql": "postgresql",
+    "postgres": "postgresql",
+    "mysql": "mysql",
+    "vdb": "vdb",
+    "clickhouse": "clickhouse",
+    "ai": "ai",
+}
 
 _FEATURE_BLOCK = re.compile(
     r"^# __BEGIN_(?P<name>[A-Z0-9_]+)__\r?\n(.*?)^# __END_(?P=name)__\r?\n",
@@ -18,6 +27,10 @@ _FEATURE_BLOCK = re.compile(
 def detect_installed_minix_extras() -> set[str]:
     """Infer optional Minix extras from packages in the current environment."""
     extras: set[str] = set()
+    if importlib.util.find_spec("psycopg") is not None:
+        extras.add("postgresql")
+    if importlib.util.find_spec("pymysql") is not None:
+        extras.add("mysql")
     if importlib.util.find_spec("qdrant_client") is not None:
         extras.add("vdb")
     if importlib.util.find_spec("clickhouse_driver") is not None:
@@ -99,7 +112,10 @@ def _minix_version_constraint() -> str:
 
 
 def minix_pip_install_spec(extras: Iterable[str]) -> str:
-    chosen = [e for e in _EXTRA_ORDER if e in extras]
+    normalized = {
+        _FEATURE_TO_PIP_EXTRA.get(e, e) for e in extras if e in _FEATURE_TO_PIP_EXTRA or e in VALID_MINIX_EXTRAS
+    }
+    chosen = [e for e in _EXTRA_ORDER if e in normalized]
     constraint = _minix_version_constraint()
     if not chosen:
         return f"minix{constraint}"

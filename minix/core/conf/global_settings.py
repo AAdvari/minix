@@ -40,20 +40,20 @@ INSTALLED_MODULES = [
 # ---------------------------------------------------------------------------
 DATABASES = {
     "default": {
-        "USER": env("DB_USER", "root"),
-        "PASSWORD": env("DB_PASS", ""),
+        "USER": env("DB_USER", "minix"),
+        "PASSWORD": env("DB_PASS", "minix"),
         "HOST": env("DB_HOST", "localhost"),
-        "PORT": env("DB_PORT", 3306),
+        "PORT": env("DB_PORT", 5432),
         "NAME": env("DB_DATABASE", "minix"),
-        "DRIVER": env("DB_DRIVER", "mysql"),
+        "DRIVER": env("DB_DRIVER", "postgresql"),
     },
     # "analytics": {
-    #     "USER": env("ANALYTICS_DB_USER", "root"),
-    #     "PASSWORD": env("ANALYTICS_DB_PASS", ""),
+    #     "USER": env("ANALYTICS_DB_USER", "minix"),
+    #     "PASSWORD": env("ANALYTICS_DB_PASS", "minix"),
     #     "HOST": env("ANALYTICS_DB_HOST", "localhost"),
-    #     "PORT": env("ANALYTICS_DB_PORT", 3306),
+    #     "PORT": env("ANALYTICS_DB_PORT", 5432),
     #     "NAME": env("ANALYTICS_DB_DATABASE", "analytics"),
-    #     "DRIVER": env("ANALYTICS_DB_DRIVER", "mysql"),
+    #     "DRIVER": env("ANALYTICS_DB_DRIVER", "postgresql"),
     # },
 }
 

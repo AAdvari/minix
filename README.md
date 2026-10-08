@@ -32,7 +32,7 @@
     - [Services](#services)
     - [Controllers](#controllers)
     - [Connectors](#connectors)
-      - [SQL Connector (MySQL/ClickHouse)](#sql-connector-mysqlclickhouse)
+      - [SQL Connector (PostgreSQL/MySQL/ClickHouse)](#sql-connector-postgresqlmysqlclickhouse)
       - [Qdrant Connector](#qdrant-connector)
       - [Object Storage Connector (S3-compatible)](#object-storage-connector-s3-compatible)
     - [Tasks \& Scheduling](#tasks--scheduling)
@@ -55,7 +55,9 @@
     - [Connectors from config](#connectors-from-config)
     - [Environment overrides](#environment-overrides)
   - [Extras](#extras)
+    - [SQL drivers](#sql-drivers)
     - [AI Capabilities](#ai-capabilities)
+    - [Vector DB (Qdrant)](#vector-db-qdrant)
     - [ClickHouse Support](#clickhouse-support)
     - [Install All Extras](#install-all-extras)
   - [Registry Usage](#registry-usage)
@@ -79,7 +81,7 @@
 
 - **FastAPI Integration**: Build high-performance REST APIs with automatic OpenAPI documentation
 - **Modular Architecture**: Organize code into self-contained modules with entities, repositories, services, and controllers
-- **Multi-Database Support**: Built-in connectors for MySQL, ClickHouse, Redis, and Qdrant (vector DB)
+- **Multi-Database Support**: Built-in connectors for PostgreSQL (default), MySQL, ClickHouse, Redis, and Qdrant (vector DB)
 - **Task Scheduling**: Celery-powered background tasks with RedBeat scheduler for periodic jobs
 - **Kafka Consumers**: Async Kafka message processing with `aiokafka`
 - **Object Storage**: S3-compatible storage support via `boto3`
@@ -106,7 +108,7 @@
 │  Tasks (Celery)  │  Consumers (Kafka)  │  Models (MLflow)       │
 ├─────────────────────────────────────────────────────────────────┤
 │                        Connectors                                │
-│  SQL (MySQL/ClickHouse) │ Redis │ Qdrant │ Object Storage (S3)  │
+│  SQL (PostgreSQL/MySQL/ClickHouse) │ Redis │ Qdrant │ Object Storage (S3)  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -303,17 +305,23 @@ class UserController(Controller):
 
 ### Connectors
 
-#### SQL Connector (MySQL/ClickHouse)
+#### SQL Connector (PostgreSQL/MySQL/ClickHouse)
+
+PostgreSQL is the recommended default (`DB_DRIVER=postgresql`). Install the matching
+extra (`minix[postgresql]` and/or `minix[mysql]`). ClickHouse remains
+`minix[clickhouse]`.
 
 ```python
 from minix.core.connectors import SqlConnector
 
-# Reads DB_* from settings / env
+# Reads DATABASES["default"] from settings / env
 connector = SqlConnector()
+# Secondary engine when both were selected at init:
+# connector = SqlConnector(connection="mysql")
 
 # Deprecated — still supported for backward compatibility:
 # from minix.core.connectors import SqlConnector, SqlConnectorConfig
-# connector = SqlConnector(SqlConnectorConfig(username="root", ...))
+# connector = SqlConnector(SqlConnectorConfig(username="minix", driver="postgresql", ...))
 ```
 
 #### Qdrant Connector
@@ -591,9 +599,9 @@ DATABASES = {
         "user": "...",
         "password": "...",
         "host": "...",
-        "port": 3306,
+        "port": 5432,
         "name": "analytics",
-        "driver": "mysql",
+        "driver": "postgresql",
     },
 }
 
@@ -641,17 +649,29 @@ MLFLOW_TRACKING_URL=http://localhost:5000
 
 ## Extras
 
+### SQL drivers
+
+```bash
+pip install "minix[postgresql]"   # recommended default
+pip install "minix[mysql]"
+pip install "minix[postgresql,mysql]"
+```
+
 ### AI Capabilities
 
-Install with AI tools (PyTorch, MLflow, Qdrant):
+Install with AI tools (PyTorch, MLflow):
 
 ```bash
 pip install "minix[ai]"
 ```
 
-### ClickHouse Support
+### Vector DB (Qdrant)
 
-Install with ClickHouse support:
+```bash
+pip install "minix[vdb]"
+```
+
+### ClickHouse Support
 
 ```bash
 pip install "minix[clickhouse]"
@@ -660,7 +680,7 @@ pip install "minix[clickhouse]"
 ### Install All Extras
 
 ```bash
-pip install "minix[ai,vdb,clickhouse]"
+pip install "minix[postgresql,mysql,ai,vdb,clickhouse]"
 ```
 
 ---
@@ -726,18 +746,35 @@ Scaffold a project in the **current directory**.
 minix init APP_NAME [OPTIONS]
 ```
 
+**Interactive prompt (first question, multi-select):**
+
+```text
+Which SQL database(s) do you want? (comma-separated for multiple)
+  1) postgresql  (recommended) [default]
+  2) mysql
+Examples: 1   |   2   |   1,2
+```
+
+Press Enter for PostgreSQL only. Select `1,2` when you need both.
+Pass `--db-driver postgresql`, `--db-driver mysql`, or
+`--db-driver postgresql,mysql` to skip the prompt (also used when stdin is not a TTY).
+
+SQL drivers are **optional extras** (`minix[postgresql]`, `minix[mysql]`). Docker only
+installs the engines you selected.
+
 | Argument / option | Default | Description |
 |-------------------|---------|-------------|
 | `APP_NAME` | *(required)* | Written to `app_name` in `config.py`, `.env`, and `.env.example` |
+| `--db-driver` | prompted (`postgresql`) | One or more: `postgresql` (recommended), `mysql` |
 | `--app-port` | `8000` | API port (Dockerfile `EXPOSE` / compose `app` mapping) |
-| `--db-port` | `3306` | Host port for MySQL |
+| `--db-port` | `5432` / `3306` | Host port for the **primary** SQL DB (PostgreSQL preferred when both are selected) |
 | `--redis-port` | `6379` | Host port for Redis |
 | `--qdrant-port` | `6333` | Host port for Qdrant HTTP |
 | `--qdrant-grpc-port` | `6334` | Host port for Qdrant gRPC |
 | `--object-storage-port` | `9000` | Host port for MinIO API |
 | `--object-storage-console-port` | `9001` | Host port for MinIO console |
-| `--extras` | *(auto)* | Comma-separated PyPI extras: `vdb`, `clickhouse`, `ai` |
-| `--no-extras` | off | Minimal Docker/compose (base `minix` only) |
+| `--extras` | *(auto)* | Comma-separated PyPI extras: `postgresql`, `mysql`, `vdb`, `clickhouse`, `ai` (SQL also set from `--db-driver`) |
+| `--no-extras` | off | Skip auto-detected non-SQL extras |
 
 **Creates:**
 
@@ -748,7 +785,7 @@ minix init APP_NAME [OPTIONS]
 | `.env` | Local overrides without the copy header (gitignored) |
 | `.gitignore` | Python / IDE / dotenv ignores |
 | `Dockerfile` | App image (`pip install "minix~=X.Y.Z"` / extras from PyPI) |
-| `docker-compose.yml` | MySQL, Redis, MinIO, API, Celery; optional Qdrant / ClickHouse / MLflow |
+| `docker-compose.yml` | PostgreSQL or MySQL, Redis, MinIO, API, Celery; optional Qdrant / ClickHouse / MLflow |
 | `.dockerignore` | Build context excludes |
 | `entries/` | `api.py`, `worker.py`, `beat.py` process entrypoints |
 
@@ -764,20 +801,33 @@ minix init APP_NAME [OPTIONS]
 - Existing optional files (`.env`, `.gitignore`, Docker files, `entries/`) are kept
   (`.env` only gains `MINIX_SETTINGS_MODULE` when missing).
 - Port flags bake defaults into `Dockerfile`, `docker-compose.yml`, `.env`, and `config.py`.
-- **Optional extras:** If you installed Minix with extras in the same environment
-  (e.g. `pip install "minix[vdb]"`), `minix init` adds matching `pip install`
-  in the Dockerfile and enables the related compose services and config blocks.
-  Override with `--extras vdb,clickhouse,ai` or use `--no-extras` for a minimal stack.
+- **SQL choice** (one or more) selects compose services, pip extras
+  (`minix[postgresql]` / `minix[mysql]`), Dockerfile client libs, and
+  `DATABASES` entries. If both are selected, PostgreSQL is the primary
+  `default` connection and MySQL is registered as `DATABASES["mysql"]`.
+- **Optional extras:** Non-SQL extras can still be inferred from the current
+  environment (e.g. `minix[vdb]`). Override with `--extras …` or `--no-extras`.
 - **Version pin:** The Dockerfile uses a compatible release on the installed minor
   (e.g. ``minix~=0.2.2`` → latest ``0.2.x`` ≥ ``0.2.2``, not ``0.3``).
   Prefer letting `minix init` manage the pin instead of hand-editing the Dockerfile.
 
 ```bash
 minix init my_app
-minix init my_app --app-port 8001 --db-port 3307 --redis-port 6380
+minix init my_app --db-driver postgresql
+minix init my_app --db-driver mysql --db-port 3307
+minix init my_app --db-driver postgresql,mysql
+minix init my_app --app-port 8001 --redis-port 6380
 pip install "minix[vdb]"
 minix init my_app --extras vdb
 minix init my_app --no-extras
+```
+
+Install SQL drivers in an existing environment with:
+
+```bash
+pip install "minix[postgresql]"
+pip install "minix[mysql]"
+pip install "minix[postgresql,mysql]"
 ```
 
 ### `minix add module`
