@@ -1,16 +1,48 @@
+from __future__ import annotations
+
+import logging
+import warnings
+from typing import Any, BinaryIO, Dict, Optional
+
 import boto3
 from botocore.exceptions import ClientError
-from typing import Optional, BinaryIO, Dict, Any
-import logging
+
 from .config import ObjectStorageConfig
+from minix.core.connectors.connector import Connector
 
 logger = logging.getLogger(__name__)
 
 
-class ObjectStorageConnector:
+class ObjectStorageConnector(Connector):
     """Connector for object storage operations."""
 
-    def __init__(self, config: ObjectStorageConfig):
+    def __init__(
+        self,
+        config: ObjectStorageConfig | None = None,
+        *,
+        connection: str = "default",
+        settings=None,
+    ):
+        """Create an object-storage connector.
+
+        Prefer ``ObjectStorageConnector(connection=...)`` with
+        ``settings.OBJECT_STORAGES``. Passing an explicit
+        ``ObjectStorageConfig`` is deprecated but still supported for
+        backward compatibility. Registry identity remains the bootstrap **salt**.
+        """
+        self.connection_name = connection
+
+        if config is None:
+            from minix.core.conf.builders import object_storage_config
+
+            config = object_storage_config(settings=settings, connection=connection)
+        else:
+            warnings.warn(
+                "Passing ObjectStorageConfig to ObjectStorageConnector is deprecated; "
+                "use ObjectStorageConnector(connection=...) with settings.OBJECT_STORAGES instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         self.config = config
         self.client = self._create_client()
         self.bucket_name = config.bucket_name

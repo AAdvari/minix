@@ -1,6 +1,7 @@
 import pickle
 import tempfile
 import time
+import os
 from abc import abstractmethod
 from typing import List, Dict
 import mlflow.pyfunc
@@ -8,8 +9,8 @@ from mlflow.tracking import MlflowClient
 from mlflow.exceptions import RestException
 import torch
 from loguru import logger
-import os
 
+from minix.core.conf import settings
 from minix.core.model import Model
 
 
@@ -25,8 +26,8 @@ class MlflowModel(mlflow.pyfunc.PythonModel):
         self.device = device
         self.packages = packages
         self.version = version
-        logger.info('MLFLOW_TRACKING_URL', os.getenv("MLFLOW_TRACKING_URL"))
-        mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URL"))
+        logger.info('MLFLOW_TRACKING_URL', settings.MLFLOW_TRACKING_URL)
+        mlflow.set_tracking_uri(settings.MLFLOW_TRACKING_URL)
         logger.info("connected")
         if packages is None:
             self.packages = [
@@ -67,7 +68,7 @@ class MlflowModel(mlflow.pyfunc.PythonModel):
                     'name': 'model_env',
                     'channels': ['defaults'],
                     'dependencies': [
-                        f"python={os.getenv('PYTHON_VERSION')}",
+                        f"python={settings.PYTHON_VERSION}",
                         'pip',
                         {
                             'pip': self.packages

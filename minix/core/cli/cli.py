@@ -1,19 +1,26 @@
+"""Minix CLI entrypoint."""
+
 import typer
 
-app = typer.Typer(help="Your Framework CLI")
+from minix.core.cli.commands import register
+from minix.core.cli.options import version_option
 
-@app.command()
-def init(project: str = "my_project"):
-    """Initialize a new project folder"""
-    typer.echo(f"Initializing {project}...")
-    # Do your actual setup logic here
-    # Example: create folder, copy template, etc.
+app = typer.Typer(
+    name="minix",
+    help="Minix framework CLI.",
+    no_args_is_help=True,
+)
 
-@app.command()
-def version():
-    """Show the framework version"""
-    import minix
-    typer.echo(f"Your Framework version: {minix.__version__}")
+
+@app.callback()
+def main(
+    version: bool = version_option,
+):
+    """Minix framework CLI."""
+
+
+register(app)
+
 
 if __name__ == "__main__":
     app()

@@ -15,7 +15,7 @@ __all__ = ["RagModule", "RagController", "RagConfig", "SmartChunker", "MetadataE
 # Third-party packages the RAG code imports at module load time.
 _REQUIRED = (
     "langchain_core", "langchain_litellm", "langchain_qdrant",
-    "langchain_text_splitters", "litellm", "qdrant_client", "psycopg2",
+    "langchain_text_splitters", "litellm", "qdrant_client", "psycopg",
 )
 
 _EXPORTS = {
