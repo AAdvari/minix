@@ -33,7 +33,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Explicit path avoids find_dotenv() frame issues (e.g. -c / stdin).
 dotenv.load_dotenv(os.environ.get("MINIX_DOTENV_PATH", ".env"))
 
-from . import global_settings as default_settings  # noqa: E402
 from .minix_settings import exports_from_config  # noqa: E402
 
 # Re-export for project ``config.py`` (avoids unresolved transitive imports).
@@ -54,6 +53,19 @@ class ImproperlyConfigured(Exception):
     """Raised when settings are used incorrectly."""
 
 
+def _default_settings() -> ModuleType:
+    """Import ``global_settings`` on first use, so importing Minix parses no settings."""
+    from . import global_settings
+
+    return global_settings
+
+
+def __getattr__(name: str) -> Any:
+    if name == "default_settings":
+        return _default_settings()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 def _pydantic_config_from_module(mod: ModuleType) -> BaseSettings | None:
     for attr in ("config", "settings"):
         obj = getattr(mod, attr, None)
@@ -66,6 +78,7 @@ class Settings:
     """Hold uppercase settings from global defaults plus an optional module."""
 
     def __init__(self, settings_module: str | None = None):
+        default_settings = _default_settings()
         for name in dir(default_settings):
             if name.isupper():
                 setattr(self, name, getattr(default_settings, name))
@@ -183,7 +196,7 @@ class LazySettings:
         """Configure settings manually (useful in tests). Must be called before access."""
         if self._wrapped is not None:
             raise ImproperlyConfigured("Settings already configured.")
-        holder = UserSettingsHolder(default_settings_obj or default_settings)
+        holder = UserSettingsHolder(default_settings_obj or _default_settings())
         for name, value in options.items():
             if not name.isupper():
                 raise TypeError(f"Setting {name!r} must be uppercase.")

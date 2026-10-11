@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Callable, TypeVar
+
+logger = logging.getLogger(__name__)
 
 T = TypeVar("T", str, bool, int, float, list[str])
 
@@ -31,17 +34,31 @@ def env(
     default: T = "",  # type: ignore[assignment]
     *,
     cast: Callable[[str], T] | None = None,
+    strict: bool = True,
 ) -> T:
     """Read ``key`` from the environment, falling back to ``default``.
 
     When ``cast`` is omitted, the cast is inferred from ``default``'s type for
     ``bool``, ``int``, ``float``, and ``list``. Otherwise the raw string (or
     default) is returned.
+
+    With ``strict=False``, a value that cannot be cast logs a warning and
+    ``default`` is returned instead of raising.
     """
     raw = os.getenv(key)
     if raw is None or raw == "":
         return default
 
+    try:
+        return _cast(raw, default, cast)
+    except (TypeError, ValueError) as exc:
+        if strict:
+            raise
+        logger.warning("Ignoring %s=%r (%s); using the default %r.", key, raw, exc, default)
+        return default
+
+
+def _cast(raw: str, default: T, cast: Callable[[str], T] | None) -> T:
     if cast is not None:
         return cast(raw)
 
