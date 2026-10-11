@@ -8,8 +8,9 @@ Usage::
     print(settings.APP_NAME)
     print(settings.DATABASES["default"]["host"])
 
-By default Minix loads a project ``config`` module when importable
-(from ``minix init``). Override with ``MINIX_SETTINGS_MODULE``.
+By default Minix loads a project ``config`` module when importable and it
+imports ``minix.core.conf`` (as the one from ``minix init`` does). Override
+with ``MINIX_SETTINGS_MODULE``.
 A pydantic ``config = Settings()`` instance is enough — no uppercase
 re-exports required.
 
@@ -20,8 +21,11 @@ Programmatic configuration (tests)::
 
 from __future__ import annotations
 
+import ast
 import importlib
+import importlib.util
 import os
+from pathlib import Path
 from types import ModuleType
 from typing import Any
 
@@ -136,16 +140,48 @@ class UserSettingsHolder:
         return "<UserSettingsHolder>"
 
 
+def _imports_minix_conf(origin: str | None) -> bool:
+    """True when the source at ``origin`` imports ``minix.core.conf``.
+
+    The file is parsed, not executed, so a project's own unrelated ``config``
+    module is never imported or run.
+    """
+    if not origin or not origin.endswith(".py"):
+        return False
+    try:
+        tree = ast.parse(Path(origin).read_text(encoding="utf-8"))
+    except (OSError, SyntaxError, UnicodeDecodeError, ValueError):
+        return False
+
+    def is_conf(name: str | None) -> bool:
+        return bool(name) and (name == "minix.core.conf" or name.startswith("minix.core.conf."))
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import) and any(is_conf(alias.name) for alias in node.names):
+            return True
+        if isinstance(node, ast.ImportFrom):
+            if is_conf(node.module):
+                return True
+            if node.module == "minix.core" and any(alias.name == "conf" for alias in node.names):
+                return True
+    return False
+
+
 def _resolve_settings_module() -> str | None:
-    """Load ``.env``, then pick the config module."""
+    """Load ``.env``, then pick the config module.
+
+    ``MINIX_SETTINGS_MODULE`` always wins. Otherwise a top-level ``config``
+    module is used only when it imports ``minix.core.conf``, so an unrelated
+    project ``config.py`` is never imported.
+    """
     dotenv.load_dotenv(os.environ.get("MINIX_DOTENV_PATH", ".env"))
     explicit = os.environ.get(ENVIRONMENT_VARIABLE)
     if explicit:
         return explicit
-    import importlib.util
 
     for candidate in DEFAULT_SETTINGS_MODULES:
-        if importlib.util.find_spec(candidate) is not None:
+        spec = importlib.util.find_spec(candidate)
+        if spec is not None and _imports_minix_conf(spec.origin):
             return candidate
     return None
 
