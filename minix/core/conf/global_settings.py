@@ -22,10 +22,10 @@ from minix.core.conf.env import env, env_optional
 # ---------------------------------------------------------------------------
 # Application
 # ---------------------------------------------------------------------------
-DEBUG = env("DEBUG", False)
+DEBUG = env("DEBUG", False, strict=False)
 APP_NAME = env("APP_NAME", "minix")
 APP_HOST = env("APP_HOST", "0.0.0.0")
-APP_PORT = env("APP_PORT", 8000)
+APP_PORT = env("APP_PORT", 8000, strict=False)
 SECRET_KEY = env_optional("SECRET_KEY")
 
 # Dotted paths to Module instances (or Module subclasses).
@@ -43,7 +43,7 @@ DATABASES = {
         "USER": env("DB_USER", "minix"),
         "PASSWORD": env("DB_PASS", "minix"),
         "HOST": env("DB_HOST", "localhost"),
-        "PORT": env("DB_PORT", 5432),
+        "PORT": env("DB_PORT", 5432, strict=False),
         "NAME": env("DB_DATABASE", "minix"),
         "DRIVER": env("DB_DRIVER", "postgresql"),
     },
@@ -51,7 +51,7 @@ DATABASES = {
     #     "USER": env("ANALYTICS_DB_USER", "minix"),
     #     "PASSWORD": env("ANALYTICS_DB_PASS", "minix"),
     #     "HOST": env("ANALYTICS_DB_HOST", "localhost"),
-    #     "PORT": env("ANALYTICS_DB_PORT", 5432),
+    #     "PORT": env("ANALYTICS_DB_PORT", 5432, strict=False),
     #     "NAME": env("ANALYTICS_DB_DATABASE", "analytics"),
     #     "DRIVER": env("ANALYTICS_DB_DRIVER", "postgresql"),
     # },
@@ -113,8 +113,8 @@ OBJECT_STORAGES = {
         "ACCESS_KEY": env("OBJECT_STORAGE_ACCESS_KEY", "minioadmin"),
         "SECRET_KEY": env("OBJECT_STORAGE_SECRET_KEY", "minioadmin"),
         "BUCKET_NAME": env("OBJECT_STORAGE_BUCKET_NAME", "minix"),
-        "USE_SSL": env("OBJECT_STORAGE_USE_SSL", False),
-        "VERIFY_SSL": env("OBJECT_STORAGE_VERIFY_SSL", False),
+        "USE_SSL": env("OBJECT_STORAGE_USE_SSL", False, strict=False),
+        "VERIFY_SSL": env("OBJECT_STORAGE_VERIFY_SSL", False, strict=False),
     },
 }
 
@@ -137,8 +137,8 @@ OIDC_SCOPES = env("OIDC_SCOPES", "openid profile email")
 OIDC_ROLE_CLAIM = env("OIDC_ROLE_CLAIM", "realm_access.roles")
 OIDC_ROLE_MAP = env_optional("OIDC_ROLE_MAP")  # JSON string
 OIDC_DEFAULT_ROLE = env("OIDC_DEFAULT_ROLE", "user")
-OIDC_JWKS_TTL = env("OIDC_JWKS_TTL", 3600)
+OIDC_JWKS_TTL = env("OIDC_JWKS_TTL", 3600, strict=False)
 OIDC_SESSION_SECRET = env_optional("OIDC_SESSION_SECRET")
 OIDC_SESSION_COOKIE = env("OIDC_SESSION_COOKIE", "minix_session")
-OIDC_SESSION_TTL = env("OIDC_SESSION_TTL", 28800)
-OIDC_COOKIE_SECURE = env("OIDC_COOKIE_SECURE", True)
+OIDC_SESSION_TTL = env("OIDC_SESSION_TTL", 28800, strict=False)
+OIDC_COOKIE_SECURE = env("OIDC_COOKIE_SECURE", True, strict=False)
