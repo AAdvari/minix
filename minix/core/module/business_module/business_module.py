@@ -51,6 +51,13 @@ class BusinessModule(Module):
                     redis = Registry().get(Redis, salt=salt)
                 else:
                     redis = Registry().get(Redis)
+                if redis is None:
+                    # bootstrap_from_settings() registers a RedisConnector, not a Redis client.
+                    from minix.core.connectors.redis_connector import RedisConnector
+
+                    connector = Registry().get(RedisConnector, salt=salt)
+                    if connector is not None:
+                        redis = connector.get_client()
                 Registry().register(
                     repository,
                     repository(
