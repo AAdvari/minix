@@ -79,6 +79,20 @@ def singularize(snake: str) -> str:
     return snake
 
 
+def pluralize(snake: str) -> str:
+    """Best-effort English plural for table names (category → categories).
+
+    Names already ending in ``s`` are kept, since module names are usually plural.
+    """
+    if snake.endswith("s"):
+        return snake
+    if snake.endswith("y") and len(snake) > 1 and snake[-2] not in "aeiou":
+        return snake[:-1] + "ies"
+    if snake.endswith(("x", "z", "ch", "sh")):
+        return snake + "es"
+    return snake + "s"
+
+
 def validate_module_name(name: str) -> str:
     snake = to_snake(name)
     if not snake or not _SNAKE_RE.match(snake):
@@ -200,7 +214,7 @@ def build_spec(
         periodic, f"{base}PeriodicTask", "PeriodicTask"
     )
 
-    table = f"{name}s" if not name.endswith("s") else name
+    table = pluralize(name)
     route = f"/{name.replace('_', '-')}"
 
     def _task_celery_name(cls: str, kind: str) -> str:
