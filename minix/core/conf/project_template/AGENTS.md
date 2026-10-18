@@ -23,6 +23,7 @@ Minix exposes these CLI entry points (nothing else):
 | `minix -v` / `minix --version` | Print installed Minix version and exit |
 | `minix init APP_NAME` | Scaffold a **new project** in the current directory |
 | `minix add module MODULE_NAME` | Scaffold a **feature module** under `src/modules/<name>/` |
+| `minix add controller\|task\|periodic\|helper\|consumer\|binding [NAME] --module=MODULE` | Add one piece to an **existing** module and wire it in `module.py` |
 
 There is **no** short form like `minix add orders`. Module creation is always:
 
@@ -39,6 +40,9 @@ minix add module <snake_case_name>
 2. **New feature module** → run `minix add module …`, then only edit generated
    files for business logic.
 3. **Do not** create `src/modules/<name>/` trees manually when the CLI can.
+   To add a controller / task / helper / consumer / periodic task / binding to
+   an existing module, run `minix add <component> [NAME] --module=<module>` instead of
+   hand-editing `module.py` and the subpackage `__init__.py`.
 4. After `minix add module` with `--register` (default), confirm the dotted path
    appears in `config.py` → `installed_modules`.
 5. Long flags that take an optional class name use **`=`**:
@@ -161,6 +165,24 @@ src/modules/<name>/
   tasks/               # optional
   consumers/           # optional
 ```
+
+### Adding to an existing module
+
+```bash
+minix add controller --module=orders             # OrderController + .add_controller(...)
+minix add controller OrderAdmin --module=orders  # OrderAdminController
+minix add task ShipOrder -m orders               # ShipOrderTask + .add_task(...)
+minix add periodic -m orders                     # OrderPeriodicTask
+minix add helper -m orders                       # OrderHelperService
+minix add consumer -m orders                     # OrderConsumer
+minix add binding -m orders                      # Order + OrderSqlRepository + OrderSqlService
+minix add binding -m orders --entity=ShopOrder --service=ShopOrderService
+```
+
+Each command writes the file, exports it from the subpackage `__init__.py`
+and appends `.add_*(...)` to the module chain. Running it again does nothing.
+`--module/-m` is required; the optional `NAME` argument sets the class name.
+Other options: `--path DIR`, `--force/-f`.
 
 ---
 
