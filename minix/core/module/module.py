@@ -19,12 +19,18 @@ class Module(Installable, ABC):
     def __init__(self, name: str):
         self.name = name
         self.entities: List[Type[Entity]] = []
-        self.services: List[Type[Service]] = []
+        # services / repositories / controllers carry an optional `provides`
+        # alias: when set, the installed instance is ALSO registered in the
+        # Registry under that base type, so lazy `Registry().get(Base)` lookups
+        # resolve to a subclass supplied by another module (DI interface
+        # binding). `provides=None` (the default) registers only under the
+        # concrete class.
+        self.services: List[Tuple[Type[Service], Type[Service] | None]] = []
         self.helper_services: List[Type[BaseService]] = []
-        self.repositories: List[Tuple[Type[Repository], str | None]] = []
+        self.repositories: List[Tuple[Type[Repository], str | None, Type[Repository] | None]] = []
         self.periodic_tasks : List[Type[PeriodicTask]] = []
         self.tasks: List[Type[Task]] = []
-        self.controllers: List[Type[Controller]] = []
+        self.controllers: List[Tuple[Type[Controller], Type[Controller] | None]] = []
         self.models: List[Tuple[Type[Model], Dict]] = []
         self.consumers: List[Type[AsyncConsumer]] = []
 
@@ -36,6 +42,8 @@ class Module(Installable, ABC):
         connection: str | None = None,
         *,
         connector_salt: str | None = _SENTINEL,  # type: ignore[assignment]
+        provides_repository: Type[Repository] | None = None,
+        provides_service: Type[Service] | None = None,
     ) -> Self:
         """Register an entity, repository, and service as one binding.
 
@@ -44,6 +52,10 @@ class Module(Installable, ABC):
 
         ``connector_salt`` is deprecated; prefer ``connection=``. When passed
         it is used as-is (including ``"default"``).
+
+        ``provides_repository`` / ``provides_service`` additionally register the
+        installed instances under a base type, so a subclass can stand in for a
+        base class that other code resolves lazily via ``Registry().get(Base)``.
         """
         if connector_salt is not _SENTINEL:
             warnings.warn(
@@ -56,8 +68,8 @@ class Module(Installable, ABC):
         else:
             salt = None if connection in (None, "default") else connection
         self.entities.append(entity)
-        self.repositories.append((repository, salt))
-        self.services.append(service)
+        self.repositories.append((repository, salt, provides_repository))
+        self.services.append((service, provides_service))
         return self
 
     def add_entity(self, entity: Type[Entity])-> Self:
@@ -78,8 +90,8 @@ class Module(Installable, ABC):
         self.periodic_tasks.append(periodic_task)
         return self
 
-    def add_service(self, service: Type[Service])-> Self:
-        """Register a service.
+    def add_service(self, service: Type[Service], provides: Type[Service] | None = None)-> Self:
+        """Register a service, optionally also under the base type `provides`.
 
         .. deprecated::
             Prefer :meth:`add_binding` so entity, repository, and service stay paired.
@@ -89,15 +101,17 @@ class Module(Installable, ABC):
             DeprecationWarning,
             stacklevel=2,
         )
-        self.services.append(service)
+        self.services.append((service, provides))
         return self
 
     def add_helper_service(self, service: Type[HelperService])-> Self:
         self.helper_services.append(service)
         return self
 
-    def add_repository(self, repository: Type[Repository], connector_salt: str | None = None)-> Self:
-        """Register a repository with an optional connector salt.
+    def add_repository(self, repository: Type[Repository], connector_salt: str | None = None,
+                       provides: Type[Repository] | None = None)-> Self:
+        """Register a repository with an optional connector salt, optionally
+        also under the base type `provides`.
 
         .. deprecated::
             Prefer :meth:`add_binding` so entity, repository, and service stay paired.
@@ -107,7 +121,7 @@ class Module(Installable, ABC):
             DeprecationWarning,
             stacklevel=2,
         )
-        self.repositories.append((repository, connector_salt))
+        self.repositories.append((repository, connector_salt, provides))
         return self
 
 
@@ -115,8 +129,10 @@ class Module(Installable, ABC):
         self.tasks.append(task)
         return self
 
-    def add_controller(self, controller: Type[Controller])-> Self:
-        self.controllers.append(controller)
+    def add_controller(self, controller: Type[Controller], provides: Type[Controller] | None = None)-> Self:
+        """Register a controller, optionally also under the base type
+        `provides` (e.g. a subclass that replaces a framework controller)."""
+        self.controllers.append((controller, provides))
         return self
 
     def add_model(self, model: Type[Model], config: Dict)-> Self:

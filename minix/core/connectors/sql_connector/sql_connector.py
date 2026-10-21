@@ -245,6 +245,13 @@ class SqlConnector(Connector):
         with transaction_scope(self) as session:
             yield session
 
+    def execute_raw(self, sql: str, params: dict | None = None):
+        """Execute one raw SQL statement (bound params) in its own transaction."""
+        with self.engine.connect() as conn:
+            result = conn.execute(text(sql), params or {})
+            conn.commit()
+            return result
+
     def get_engine(self):
         return self.engine
 

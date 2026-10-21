@@ -122,8 +122,12 @@ def register_scheduler():
     Registry().register(Scheduler, Scheduler(cfg))
 
 
-def register_fast_api():
+def register_fast_api(default_cors: bool = True):
     app = FastAPI(title=getattr(settings, "APP_NAME", "minix"))
+    if not default_cors:
+        # The application installs its own CORS policy.
+        Registry().register(FastAPI, app)
+        return
     # Allow CORS for localhost-related origins and local network IPs.
     app.add_middleware(
         CORSMiddleware,
@@ -145,7 +149,7 @@ def register_fast_api():
     Registry().register(FastAPI, app)
 
 
-def register_modules(modules: list[Module]):
+def register_modules(modules: list[Module], default_cors: bool = True):
     fast_api = False
     scheduler = False
     for module in modules:
@@ -157,7 +161,7 @@ def register_modules(modules: list[Module]):
             scheduler = True
 
     if fast_api:
-        register_fast_api()
+        register_fast_api(default_cors)
     if scheduler:
         register_scheduler()
     for module in modules:
@@ -166,7 +170,8 @@ def register_modules(modules: list[Module]):
 
 def bootstrap(
         modules: list[Module] | None = None,
-        connectors: Sequence[ConnectorEntry] | None = None
+        connectors: Sequence[ConnectorEntry] | None = None,
+        default_cors: bool = True,
 ):
     """Register explicit connector and module lists.
 
@@ -176,6 +181,9 @@ def bootstrap(
 
     Only non-empty ``connectors`` / ``modules`` are registered — omitted or
     ``None`` means skip.
+
+    ``default_cors=False`` skips the built-in localhost / private-network CORS
+    policy, for an application that installs its own ``CORSMiddleware``.
     """
     warnings.warn(
         "bootstrap() with explicit connector/module lists is deprecated; "
@@ -189,7 +197,7 @@ def bootstrap(
         else:
             register_connector_entries(connectors)
     if modules:
-        register_modules(modules)
+        register_modules(modules, default_cors)
 
 
 def _register_settings_connectors_lazily() -> None:
@@ -227,6 +235,7 @@ def _register_settings_connectors_lazily() -> None:
 def bootstrap_from_settings(
         modules: list[Module] | None = None,
         connectors: Sequence[ConnectorEntry] | None = None,
+        default_cors: bool = True,
 ):
     """Register connectors and modules from settings when lists are omitted.
 
@@ -241,6 +250,9 @@ def bootstrap_from_settings(
     - omitted / ``None`` — install ``settings.INSTALLED_MODULES``
     - explicit sequence — install that list
     - empty sequence — install nothing
+
+    ``default_cors=False`` skips the built-in localhost / private-network CORS
+    policy, for an application that installs its own ``CORSMiddleware``.
     """
     if connectors is None:
         _register_settings_connectors_lazily()
@@ -250,4 +262,4 @@ def bootstrap_from_settings(
     if modules is None:
         modules = modules_from_settings(settings)
     if modules:
-        register_modules(modules)
+        register_modules(modules, default_cors)

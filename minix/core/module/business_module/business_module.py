@@ -32,18 +32,16 @@ class BusinessModule(Module):
         return self
 
     def install_repositories(self, repositories)-> Self:
-        for idx, repo_salt_tuple in enumerate(repositories):
-            repository, salt = repo_salt_tuple
+        for idx, repo_tuple in enumerate(repositories):
+            repository, salt, provides = repo_tuple
+            instance = None
 
             if issubclass(repository, SqlRepository):
                 if salt is not None:
                     sql_connector = Registry().get(SqlConnector, salt=salt)
                 else:
                     sql_connector = Registry().get(SqlConnector)
-                Registry().register(
-                    repository,
-                    repository(self.entities[idx], sql_connector)
-                )
+                instance = repository(self.entities[idx], sql_connector)
 
             elif issubclass(repository, RedisRepository):
                 from redis import Redis
@@ -58,13 +56,10 @@ class BusinessModule(Module):
                     connector = Registry().get(RedisConnector, salt=salt)
                     if connector is not None:
                         redis = connector.get_client()
-                Registry().register(
-                    repository,
-                    repository(
+                instance = repository(
                         self.entities[idx],
                         redis
                     )
-                )
             elif importlib.util.find_spec("qdrant_client"):
                 from minix.core.connectors import QdrantConnector
                 from minix.core.repository import QdrantRepository
@@ -75,30 +70,29 @@ class BusinessModule(Module):
                     qdrant_connector = Registry().get(QdrantConnector, salt=salt)
                 else:
                     qdrant_connector = Registry().get(QdrantConnector)
-                repo = repository(
+                instance = repository(
                     self.entities[idx],
                     qdrant_connector,
                 )
                 try:
                     loop = asyncio.get_running_loop()
-                    asyncio.run_coroutine_threadsafe(repo.create_collection(), loop)
+                    asyncio.run_coroutine_threadsafe(instance.create_collection(), loop)
                 except RuntimeError:
-                    asyncio.run(repo.create_collection())
+                    asyncio.run(instance.create_collection())
 
-                Registry().register(
-                    repository,
-                    repo,
-                )
+            if instance is not None:
+                Registry().register(repository, instance)
+                if provides is not None:
+                    Registry().register(provides, instance)
         return self
 
     def install_services(self, services)-> Self:
-        for idx, service in enumerate(services):
-
-            Registry().register(
-                service,
-                service(Registry().get(self.repositories[idx][0]))
-            )
-
+        for idx, service_tuple in enumerate(services):
+            service, provides = service_tuple
+            instance = service(Registry().get(self.repositories[idx][0]))
+            Registry().register(service, instance)
+            if provides is not None:
+                Registry().register(provides, instance)
         return self
 
     def install_helper_services(self, services)-> Self:
@@ -123,13 +117,13 @@ class BusinessModule(Module):
         if len(controllers) == 0:
             return self
         api = Registry().get(FastAPI)
-        for controller in controllers:
-            Registry().register(
-                controller,
-                controller()
-            )
-            r = Registry().get(controller)
-            api.include_router(r.get_router)
+        for controller_tuple in controllers:
+            controller, provides = controller_tuple
+            instance = controller()
+            Registry().register(controller, instance)
+            if provides is not None:
+                Registry().register(provides, instance)
+            api.include_router(instance.get_router)
 
         return self
 

@@ -24,8 +24,11 @@ class ApiKeyRepository(SqlRepository[ApiKeyEntity]):
             name: str | None = None,
             expires_at: datetime | None = None,
     ) -> tuple[ApiKeyEntity, str]:
-        full_key, prefix, key_hash = ApiKeyEntity.generate_key()
-        entity = ApiKeyEntity(
+        # Construct via self.entity (not the imported class) so a mounted
+        # subclass (e.g. one carrying a scope column) takes effect; a consuming
+        # layer overrides create_key to stamp its extra fields.
+        full_key, prefix, key_hash = self.entity.generate_key()
+        entity = self.entity(
             key_hash=key_hash,
             key_prefix=prefix,
             user_id=user_id,
@@ -52,3 +55,12 @@ class ApiKeyRepository(SqlRepository[ApiKeyEntity]):
 
     def get_keys_for_user(self, user_id: str) -> List[ApiKeyEntity]:
         return self.get_by(user_id=user_id, is_active=True)
+
+    def list_keys(self, user_id: str | None = None) -> List[ApiKeyEntity]:
+        """List keys including revoked ones, for admin views and the user's
+        own key-management UI. Filters by user_id when provided."""
+        with self.get_session() as session:
+            q = session.query(self.entity)
+            if user_id is not None:
+                q = q.filter(self.entity.user_id == user_id)
+            return q.order_by(self.entity.created_at.desc()).all()
