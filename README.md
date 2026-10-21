@@ -660,17 +660,18 @@ from installed packages. `--rag --no-extras` still includes the RAG requirements
 MySQL alone is rejected; when both SQL drivers are selected, PostgreSQL is primary.
 
 `minix add rag` preserves existing settings and secrets, registers missing modules,
-adds missing keys to `.env` and `.env.example`, and updates the Dockerfile dependencies.
-It creates `docker-compose.rag.yml` for Qdrant and the app/worker connections.
-Run the existing project with both Compose files:
+adds missing keys to `.env` and `.env.example`, adds the `rag` extra to the minix
+requirement in `pyproject.toml` (PEP 621 or Poetry) or `requirements.txt`, and updates
+the Dockerfile dependencies. It creates `docker-compose.rag.yml` for Qdrant and the
+app/worker connections, and sets `COMPOSE_FILE` in `.env` so a plain
+`docker compose up --build` loads it. Qdrant requires `QDRANT_API_KEY` (it rejects
+every request when the key is set but empty): `.env` gets a random key and
+`.env.example` a `change-me` placeholder.
 
-```bash
-docker compose -f docker-compose.yml -f docker-compose.rag.yml up --build
-```
-
-Repeated `minix add rag` calls leave the generated files unchanged. For local
-execution, install `minix[rag]` and Poppler separately, set the model provider's
-API key in `.env`, and create the SQL tables as described below.
+Repeated `minix add rag` calls leave the generated files unchanged. Afterwards,
+reinstall (for example `poetry lock && poetry install`), install Poppler for local
+PDF ingestion, set the model provider's API key in `.env`, and create the SQL tables
+as described below.
 
 **Manual registration** — in a project from `minix init` with PostgreSQL as the `default`
 database, add the module to `installed_modules` in `config.py`:

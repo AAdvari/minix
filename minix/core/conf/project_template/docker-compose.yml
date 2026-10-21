@@ -80,7 +80,8 @@ services:
       - qdrant_data:/qdrant/storage
     environment:
       QDRANT__SERVICE__HOST: "0.0.0.0"
-      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:-}
+      # Qdrant treats an empty key as set and rejects every request, so require one.
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:?Set QDRANT_API_KEY in .env}
     networks:
       - backend
 

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from minix.core.conf.env import env, env_optional
+
 
 def _get(cfg: Any, name: str, default: Any = None) -> Any:
     return getattr(cfg, name, default)
@@ -87,8 +89,10 @@ def exports_from_config(cfg: Any) -> dict[str, Any]:
         cfg,
         "qdrant_connections",
         flat_default={
-            "url": _get(cfg, "qdrant_url", "http://localhost:6333"),
-            "api_key": _get(cfg, "qdrant_api_key", None),
+            # Same environment fallback as global_settings, so an empty
+            # qdrant_connections still follows QDRANT_URL / QDRANT_API_KEY.
+            "url": _get(cfg, "qdrant_url", None) or env("QDRANT_URL", "http://localhost:6333"),
+            "api_key": _get(cfg, "qdrant_api_key", None) or env_optional("QDRANT_API_KEY"),
         },
         extra_attr="extra_qdrant_connections",
     )

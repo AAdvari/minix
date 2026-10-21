@@ -113,7 +113,9 @@ class RagCliTests(unittest.TestCase):
         dockerfile = (self.root / "Dockerfile").read_bytes()
         self.invoke("add", "rag")
         self.assertEqual((self.root / "Dockerfile").read_bytes(), dockerfile)
-        self.assertNotIn("  qdrant:", (self.root / "docker-compose.rag.yml").read_text())
+        override = (self.root / "docker-compose.rag.yml").read_text()
+        self.assertNotIn("image: qdrant", override)
+        self.assertIn("QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:?", override)
         self.assertEqual(dotenv_values(self.root / ".env")["QDRANT_URL"], "http://localhost:7333")
 
     def test_inline_list_comments_and_unicode_survive_without_running_config(self):
@@ -174,6 +176,80 @@ class RagCliTests(unittest.TestCase):
         with patch("minix.core.cli.commands.init_scaffold._minix_version_constraint", return_value="~=0.2.2"):
             self.assertEqual(minix_pip_install_spec({"rag"}), "minix[rag]~=0.3.0")
 
+
+    def test_add_rag_inserts_modules_without_blank_lines(self):
+        self.init()
+        self.invoke("add", "rag")
+        source = (self.root / "config.py").read_text()
+        self.assertNotRegex(source, r"\n[ \t]+\n")
+        self.assertIn(
+            '            # "src.modules.example.ExampleModule",\n'
+            '            "minix.core.modules.rag.RagModule",\n'
+            "        ]",
+            source,
+        )
+
+    def test_add_rag_requires_and_generates_a_qdrant_api_key(self):
+        self.init()
+        self.invoke("add", "rag")
+        key = dotenv_values(self.root / ".env")["QDRANT_API_KEY"]
+        self.assertRegex(key, r"^[0-9a-f]{48}$")
+        self.assertEqual(dotenv_values(self.root / ".env.example")["QDRANT_API_KEY"], "change-me")
+        override = (self.root / "docker-compose.rag.yml").read_text()
+        self.assertNotIn("QDRANT_API_KEY:-", override)
+        self.assertIn("QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:?", override)
+
+    def test_init_rag_writes_a_real_qdrant_api_key(self):
+        self.init("--rag")
+        self.assertRegex(dotenv_values(self.root / ".env")["QDRANT_API_KEY"], r"^[0-9a-f]{48}$")
+        self.assertEqual(dotenv_values(self.root / ".env.example")["QDRANT_API_KEY"], "change-me")
+        self.assertNotIn("QDRANT_API_KEY:-", (self.root / "docker-compose.yml").read_text())
+
+    def test_add_rag_loads_the_override_through_compose_file(self):
+        self.init()
+        with (self.root / ".env").open("a") as stream:
+            stream.write("\nQDRANT_API_KEY=keep-me\n")
+        result = self.invoke("add", "rag")
+        env = dotenv_values(self.root / ".env")
+        self.assertEqual(env["COMPOSE_FILE"], "docker-compose.yml:docker-compose.rag.yml")
+        self.assertEqual(env["COMPOSE_PATH_SEPARATOR"], ":")
+        self.assertEqual(env["QDRANT_API_KEY"], "keep-me")
+        self.assertIn("Start services: docker compose up --build", result.output)
+
+    def test_add_rag_adds_the_extra_to_dependency_files(self):
+        self.init()
+        (self.root / "pyproject.toml").write_text(
+            '[project]\nname = "demo"\ndependencies = [\n    "minix[postgresql] (>=0.3.1,<0.4.0)",\n'
+            '    "minix-helper>=1",\n]\n'
+        )
+        (self.root / "requirements.txt").write_text("minix~=0.3.1\nrequests\n")
+        result = self.invoke("add", "rag")
+        self.assertIn('"minix[postgresql,rag] (>=0.3.1,<0.4.0)"', (self.root / "pyproject.toml").read_text())
+        self.assertIn('"minix-helper>=1"', (self.root / "pyproject.toml").read_text())
+        self.assertEqual((self.root / "requirements.txt").read_text(), "minix[rag]~=0.3.1\nrequests\n")
+        self.assertIn("poetry lock", result.output)
+        previous = self.snapshot()
+        self.invoke("add", "rag")
+        self.assertEqual(self.snapshot(), previous)
+
+    def test_add_rag_adds_the_extra_to_poetry_dependencies(self):
+        self.init()
+        pyproject = self.root / "pyproject.toml"
+        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.12"\nminix = "^0.3.1"\n')
+        self.invoke("add", "rag")
+        self.assertIn('minix = { version = "^0.3.1", extras = ["rag"] }', pyproject.read_text())
+        pyproject.write_text('[tool.poetry.dependencies]\nminix = { version = "^0.3.1", extras = ["postgresql"] }\n')
+        self.invoke("add", "rag")
+        self.assertIn('extras = ["rag", "postgresql"]', pyproject.read_text())
+
+    def test_empty_qdrant_connections_follow_the_environment(self):
+        from types import SimpleNamespace
+
+        from minix.core.conf.minix_settings import exports_from_config
+
+        with patch.dict(os.environ, {"QDRANT_URL": "http://qdrant:6333", "QDRANT_API_KEY": "secret"}):
+            exports = exports_from_config(SimpleNamespace(qdrant_connections={}))
+        self.assertEqual(exports["QDRANT_CONNECTIONS"]["default"], {"url": "http://qdrant:6333", "api_key": "secret"})
 
 if __name__ == "__main__":
     unittest.main()

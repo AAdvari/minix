@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import secrets
 from pathlib import Path
 from typing import Optional
 
@@ -269,6 +270,8 @@ def init(
     config = _render((_TEMPLATE_DIR / "config.py").read_text(), **render_kw)
     env_example = _render((_TEMPLATE_DIR / ".env.example").read_text(), **render_kw)
     env = _env_file_content(env_example)
+    # The committed example keeps a placeholder; the local .env gets a real key.
+    env = env.replace("QDRANT_API_KEY=change-me\n", f"QDRANT_API_KEY={secrets.token_hex(24)}\n")
 
     (root / "config.py").write_text(config)
     created = ["config.py"]

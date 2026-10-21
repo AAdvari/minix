@@ -109,12 +109,14 @@ minix init my_app --rag
 Run in an existing project with `config.py` and PostgreSQL as the default database.
 Registers `AuthModule` and `RagModule`, adds missing RAG environment keys while
 preserving existing values, and adds Docker dependencies (the `rag` extra and
-Poppler). Creates `docker-compose.rag.yml` for Qdrant; keep the base Compose file.
+Poppler), and the `rag` extra on the minix requirement in `pyproject.toml` or
+`requirements.txt`. Creates `docker-compose.rag.yml` for Qdrant (keep the base Compose
+file) and sets `COMPOSE_FILE` and a random `QDRANT_API_KEY` in `.env`.
 
 ```bash
 minix add rag
-pip install "minix[rag]"  # for local execution
-docker compose -f docker-compose.yml -f docker-compose.rag.yml up --build
+poetry lock && poetry install  # or: pip install "minix[rag]"
+docker compose up --build
 ```
 
 Set the model provider's API key in `.env` and create SQL tables using the project's
