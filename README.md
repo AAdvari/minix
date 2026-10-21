@@ -643,7 +643,36 @@ Qdrant server (vectors); PDF ingestion needs the `poppler` system package.
 Importing `minix.core.modules.rag` without the extra raises an `ImportError`
 that tells you the command above.
 
-**Mount it** — in a project from `minix init` with PostgreSQL as the `default`
+**Enable it with the CLI:**
+
+```bash
+# New project (PostgreSQL is the default)
+minix init my_app --rag
+
+# Existing project with PostgreSQL as its default database
+minix add rag
+```
+
+`--rag` enables Qdrant, registers `AuthModule` and `RagModule`, adds model settings
+to the environment templates, and includes the `rag` extra and Poppler in Docker.
+`--extras rag` also enables RAG. RAG is enabled explicitly rather than inferred
+from installed packages. `--rag --no-extras` still includes the RAG requirements.
+MySQL alone is rejected; when both SQL drivers are selected, PostgreSQL is primary.
+
+`minix add rag` preserves existing settings and secrets, registers missing modules,
+adds missing keys to `.env` and `.env.example`, and updates the Dockerfile dependencies.
+It creates `docker-compose.rag.yml` for Qdrant and the app/worker connections.
+Run the existing project with both Compose files:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.rag.yml up --build
+```
+
+Repeated `minix add rag` calls leave the generated files unchanged. For local
+execution, install `minix[rag]` and Poppler separately, set the model provider's
+API key in `.env`, and create the SQL tables as described below.
+
+**Manual registration** — in a project from `minix init` with PostgreSQL as the `default`
 database, add the module to `installed_modules` in `config.py`:
 
 ```python
@@ -918,6 +947,8 @@ minix add module --help
 | Goal | Command |
 |------|---------|
 | New project in cwd | `minix init APP_NAME` |
+| New project with RAG | `minix init APP_NAME --rag` |
+| Enable built-in RAG in an existing project | `minix add rag` |
 | New feature module | `minix add module MODULE_NAME` |
 | Add to existing module | `minix add controller\|task\|periodic\|helper\|consumer\|binding [NAME] --module=MODULE` |
 | Version | `minix -v` / `minix --version` |
@@ -969,7 +1000,8 @@ installs the engines you selected.
 | `--qdrant-grpc-port` | `6334` | Host port for Qdrant gRPC |
 | `--object-storage-port` | `9000` | Host port for MinIO API |
 | `--object-storage-console-port` | `9001` | Host port for MinIO console |
-| `--extras` | *(auto)* | Comma-separated PyPI extras: `postgresql`, `mysql`, `vdb`, `clickhouse`, `ai` (SQL also set from `--db-driver`) |
+| `--extras` | *(auto)* | Comma-separated PyPI extras: `postgresql`, `mysql`, `vdb`, `clickhouse`, `ai`, `rag` (SQL also set from `--db-driver`) |
+| `--rag` | off | Enable RAG, Qdrant, model environment settings, and PDF support; requires PostgreSQL |
 | `--no-extras` | off | Skip auto-detected non-SQL extras |
 
 **Creates:**

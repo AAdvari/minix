@@ -6,6 +6,10 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         build-essential \
         pkg-config \
+# __BEGIN_RAG__
+# Minix RAG dependencies
+        poppler-utils \
+# __END_RAG__
 # __BEGIN_POSTGRESQL__
         libpq-dev \
 # __END_POSTGRESQL__

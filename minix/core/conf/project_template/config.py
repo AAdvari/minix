@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     installed_modules: list[str] = Field(
         default_factory=lambda: [
             "minix.core.modules.auth.AuthModule",
+# __BEGIN_RAG__
+            "minix.core.modules.rag.RagModule",
+# __END_RAG__
             # "src.modules.example.ExampleModule",
         ]
     )

@@ -6,8 +6,8 @@ import importlib.util
 import re
 from typing import Iterable
 
-VALID_MINIX_EXTRAS = frozenset({"postgresql", "mysql", "vdb", "clickhouse", "ai"})
-_EXTRA_ORDER = ("postgresql", "mysql", "vdb", "clickhouse", "ai")
+VALID_MINIX_EXTRAS = frozenset({"postgresql", "mysql", "vdb", "clickhouse", "ai", "rag"})
+_EXTRA_ORDER = ("postgresql", "mysql", "vdb", "clickhouse", "ai", "rag")
 # Template feature blocks may use shorter aliases (e.g. BEGIN_POSTGRES).
 _FEATURE_TO_PIP_EXTRA = {
     "postgresql": "postgresql",
@@ -16,6 +16,7 @@ _FEATURE_TO_PIP_EXTRA = {
     "vdb": "vdb",
     "clickhouse": "clickhouse",
     "ai": "ai",
+    "rag": "rag",
 }
 
 _FEATURE_BLOCK = re.compile(
@@ -159,6 +160,9 @@ def minix_pip_install_spec(extras: Iterable[str]) -> str:
     }
     chosen = [e for e in _EXTRA_ORDER if e in normalized]
     constraint = _minix_version_constraint()
+    # RAG first shipped in 0.3.0; an older core release cannot provide it.
+    if "rag" in normalized and _version_tuple(constraint.removeprefix("~=")) < (0, 3, 0):
+        constraint = "~=0.3.0"
     if not chosen:
         return f"minix{constraint}"
     return f'minix[{",".join(chosen)}]{constraint}'

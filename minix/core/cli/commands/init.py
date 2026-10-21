@@ -109,10 +109,11 @@ def _render(
     ports: dict[str, int],
     features: set[str],
     placeholders: dict[str, str],
+    pip_spec: str | None = None,
 ) -> str:
     rendered = apply_feature_blocks(content, features)
     rendered = rendered.replace("my_project", app_name)
-    rendered = rendered.replace("__MINIX_PIP_SPEC__", minix_pip_install_spec(features))
+    rendered = rendered.replace("__MINIX_PIP_SPEC__", pip_spec or minix_pip_install_spec(features))
     for key, value in placeholders.items():
         rendered = rendered.replace(f"__{key}__", value)
     for key, value in ports.items():
@@ -177,7 +178,7 @@ def init(
         "--extras",
         help=(
             "Comma-separated Minix PyPI extras for Docker and compose "
-            "(postgresql, mysql, vdb, clickhouse, ai). "
+            "(postgresql, mysql, vdb, clickhouse, ai, rag). "
             "SQL extras are also set from --db-driver / the SQL prompt. "
             "Default for non-SQL extras: infer from this environment."
         ),
@@ -186,6 +187,11 @@ def init(
         False,
         "--no-extras",
         help="Skip auto-detected non-SQL extras (SQL extras from --db-driver still apply).",
+    ),
+    rag: bool = typer.Option(
+        False,
+        "--rag",
+        help="Enable the built-in RAG module, Qdrant, and PDF support (requires PostgreSQL).",
     ),
 ):
     """
@@ -215,6 +221,11 @@ def init(
     minix_extras -= {"postgresql", "mysql"}
 
     drivers = prompt_sql_drivers(explicit=db_driver)
+    if rag or "rag" in minix_extras:
+        if "postgresql" not in drivers:
+            typer.echo("RAG requires PostgreSQL as the default database; use --db-driver postgresql.", err=True)
+            raise typer.Exit(code=1)
+        minix_extras.update({"rag", "vdb"})
     primary = primary_sql_driver(drivers)
     primary_meta = sql_driver_defaults(primary)
     resolved_db_port = int(db_port if db_port is not None else primary_meta["port"])
@@ -252,6 +263,7 @@ def init(
         ports=ports,
         features=features,
         placeholders=placeholders,
+        pip_spec=minix_pip_install_spec(features),
     )
 
     config = _render((_TEMPLATE_DIR / "config.py").read_text(), **render_kw)
@@ -279,9 +291,12 @@ def init(
         _write_if_missing(root, relative, content, created)
 
     port_summary = ", ".join(f"{k}={v}" for k, v in ports.items())
-    extras_label = minix_pip_install_spec(features)
+    extras_label = render_kw["pip_spec"]
     db_label = "+".join(drivers)
     typer.echo(
         f"Initialized (APP_NAME={app_name}; db={db_label}; primary={primary}; "
         f"pip={extras_label}; {port_summary}); wrote: {', '.join(created)}"
     )
+    if "rag" in features:
+        typer.echo('Install local dependencies: pip install "minix[rag]"')
+        typer.echo("Set your model provider API key in .env. Create the RAG SQL tables using your schema/migration workflow.")

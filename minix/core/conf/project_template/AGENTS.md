@@ -22,6 +22,8 @@ Minix exposes these CLI entry points (nothing else):
 | `minix` / `minix --help` | Root help (`no_args_is_help`) |
 | `minix -v` / `minix --version` | Print installed Minix version and exit |
 | `minix init APP_NAME` | Scaffold a **new project** in the current directory |
+| `minix init APP_NAME --rag` | Scaffold a project with built-in RAG and Qdrant (requires PostgreSQL) |
+| `minix add rag` | Enable built-in RAG in an **existing** PostgreSQL project |
 | `minix add module MODULE_NAME` | Scaffold a **feature module** under `src/modules/<name>/` |
 | `minix add controller\|task\|periodic\|helper\|consumer\|binding [NAME] --module=MODULE` | Add one piece to an **existing** module and wire it in `module.py` |
 
@@ -76,7 +78,8 @@ minix init APP_NAME [OPTIONS]
 | `--qdrant-grpc-port` | `6334` | Qdrant gRPC host port |
 | `--object-storage-port` | `9000` | MinIO API host port |
 | `--object-storage-console-port` | `9001` | MinIO console host port |
-| `--extras` | *(auto)* | PyPI extras: `postgresql`, `mysql`, `vdb`, `clickhouse`, `ai` |
+| `--extras` | *(auto)* | PyPI extras: `postgresql`, `mysql`, `vdb`, `clickhouse`, `ai`, `rag` |
+| `--rag` | off | Register RAG and configure Qdrant, model settings, and Docker PDF support |
 | `--no-extras` | off | Skip auto-detected non-SQL extras |
 
 **Behavior agents must respect:**
@@ -96,7 +99,28 @@ minix init my_app --db-driver postgresql,mysql
 minix init my_app --app-port 8001 --redis-port 6380
 minix init my_app --extras vdb
 minix init my_app --no-extras
+minix init my_app --rag
 ```
+
+---
+
+## `minix add rag`
+
+Run in an existing project with `config.py` and PostgreSQL as the default database.
+Registers `AuthModule` and `RagModule`, adds missing RAG environment keys while
+preserving existing values, and adds Docker dependencies (the `rag` extra and
+Poppler). Creates `docker-compose.rag.yml` for Qdrant; keep the base Compose file.
+
+```bash
+minix add rag
+pip install "minix[rag]"  # for local execution
+docker compose -f docker-compose.yml -f docker-compose.rag.yml up --build
+```
+
+Set the model provider's API key in `.env` and create SQL tables using the project's
+migration workflow. Local PDF ingestion needs Poppler. Repeated calls preserve
+the generated files. `--extras rag` at init has the same effect as `--rag`;
+`--rag --no-extras` still enables RAG and its required services.
 
 ---
 
