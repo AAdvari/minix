@@ -13,11 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from minix.core.registry import Registry
 from minix.core.scheduler import Scheduler, SchedulerConfig
 from minix.core.conf import settings
-from minix.core.conf.builders import (
-    connectors_from_settings,
-    modules_from_settings,
-    scheduler_config,
-)
+from minix.core.conf.builders import modules_from_settings, scheduler_config
 
 try:
     import pymysql
@@ -204,6 +200,38 @@ def bootstrap(
         register_modules(modules, default_cors)
 
 
+def _register_settings_connectors_lazily() -> None:
+    """Register every settings connection; each connector is built on first lookup.
+
+    Connections nothing uses are never created, so an unused default (for
+    example a PostgreSQL database without the ``postgresql`` extra) can't
+    break startup.
+    """
+    from functools import partial
+
+    from minix.core.connectors import SqlConnector
+    from minix.core.connectors.qdrant_connector import QdrantConnector
+    from minix.core.connectors.redis_connector import RedisConnector
+    from minix.core.object_storage import ObjectStorageConnector
+
+    maps = (
+        ("DATABASES", SqlConnector),
+        ("OBJECT_STORAGES", ObjectStorageConnector),
+        ("QDRANT_CONNECTIONS", QdrantConnector),
+        ("REDIS_CONNECTIONS", RedisConnector),
+    )
+    for map_attr, connector_cls in maps:
+        connections = getattr(settings, map_attr, None) or {}
+        if not isinstance(connections, dict):
+            continue
+        for name in connections:
+            Registry()._register_factory(
+                connector_cls,
+                partial(connector_cls, connection=name, settings=settings),
+                salt=None if name == "default" else name,
+            )
+
+
 def bootstrap_from_settings(
         modules: list[Module] | None = None,
         connectors: Sequence[ConnectorEntry] | None = None,
@@ -214,7 +242,7 @@ def bootstrap_from_settings(
     ``connectors``:
     - omitted / ``None`` — auto-wire from settings connection maps
       (``DATABASES``, ``OBJECT_STORAGES``, ``QDRANT_CONNECTIONS``,
-      ``REDIS_CONNECTIONS``)
+      ``REDIS_CONNECTIONS``); each connector is created on first lookup
     - explicit sequence — register that list
     - empty sequence — register nothing
 
@@ -227,8 +255,8 @@ def bootstrap_from_settings(
     policy, for an application that installs its own ``CORSMiddleware``.
     """
     if connectors is None:
-        connectors = connectors_from_settings(settings)
-    if connectors:
+        _register_settings_connectors_lazily()
+    elif connectors:
         register_connector_entries(connectors)
 
     if modules is None:

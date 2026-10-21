@@ -71,6 +71,7 @@
       - [Flags](#flags)
       - [Naming rules](#naming-rules)
       - [Module layout](#module-layout)
+    - [Adding to an existing module](#adding-to-an-existing-module)
       - [After scaffolding](#after-scaffolding)
   - [License](#license)
   - [Contributing](#contributing)
@@ -918,6 +919,7 @@ minix add module --help
 |------|---------|
 | New project in cwd | `minix init APP_NAME` |
 | New feature module | `minix add module MODULE_NAME` |
+| Add to existing module | `minix add controller\|task\|periodic\|helper\|consumer\|binding [NAME] --module=MODULE` |
 | Version | `minix -v` / `minix --version` |
 
 ### Global options
@@ -1134,6 +1136,40 @@ from src.modules.orders import OrdersModule
 Cross-module links: put the FK on the owning entity and resolve the other side with
 `Registry().get(OtherService)` in services (do not merge unrelated entities into one
 module only because they relate).
+
+
+### Adding to an existing module
+
+To add a piece you skipped at creation time (for example, after
+`--no-controller`), use `minix add <component> [NAME] --module=MODULE`. The CLI writes the
+file, exports it from the subpackage `__init__.py`, and appends the
+matching `.add_*(...)` call to the `BusinessModule` chain in `module.py`.
+Existing code is not rewritten. Running the command again does nothing,
+because the file is kept and the call is already wired.
+
+| Command | Generates | Wiring |
+|---------|-----------|--------|
+| `minix add controller -m MODULE` | `controllers/<x>_controller.py` | `.add_controller(...)` |
+| `minix add task -m MODULE` | `tasks/<x>_task.py` | `.add_task(...)` |
+| `minix add periodic -m MODULE` | `tasks/<x>_periodic_task.py` | `.add_periodic_task(...)` |
+| `minix add helper -m MODULE` | `services/<x>_helper_service.py` | `.add_helper_service(...)` |
+| `minix add consumer -m MODULE` | `consumers/<x>_consumer.py` | `.add_consumer(...)` |
+| `minix add binding -m MODULE` | entity + repository + service | `.add_binding(...)` |
+
+`--module/-m` (required) names the target module. The optional `NAME`
+argument sets a custom class name (`binding` takes `--entity`,
+`--repository`, `--service` instead). `--path DIR` points to a non-default
+package directory, and `--force/-f` overwrites the component file.
+A controller added to a module that already has a binding uses that
+binding's service.
+
+```bash
+minix add module orders --no-controller
+minix add controller --module=orders             # OrderController
+minix add controller OrderAdmin --module=orders  # OrderAdminController
+minix add task ShipOrder -m orders               # ShipOrderTask
+minix add binding -m payments --entity=Payment
+```
 
 ---
 
