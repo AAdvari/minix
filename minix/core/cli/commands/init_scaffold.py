@@ -6,12 +6,13 @@ import importlib.util
 import re
 from typing import Iterable
 
-VALID_MINIX_EXTRAS = frozenset({"postgresql", "mysql", "vdb", "clickhouse", "ai", "rag"})
-_EXTRA_ORDER = ("postgresql", "mysql", "vdb", "clickhouse", "ai", "rag")
+VALID_MINIX_EXTRAS = frozenset({"postgresql", "pgvector", "mysql", "vdb", "clickhouse", "ai", "rag"})
+_EXTRA_ORDER = ("postgresql", "pgvector", "mysql", "vdb", "clickhouse", "ai", "rag")
 # Template feature blocks may use shorter aliases (e.g. BEGIN_POSTGRES).
 _FEATURE_TO_PIP_EXTRA = {
     "postgresql": "postgresql",
     "postgres": "postgresql",
+    "pgvector": "pgvector",
     "mysql": "mysql",
     "vdb": "vdb",
     "clickhouse": "clickhouse",
@@ -30,6 +31,8 @@ def detect_installed_minix_extras() -> set[str]:
     extras: set[str] = set()
     if importlib.util.find_spec("psycopg") is not None:
         extras.add("postgresql")
+    if importlib.util.find_spec("pgvector") is not None:
+        extras.add("pgvector")
     if importlib.util.find_spec("pymysql") is not None:
         extras.add("mysql")
     if importlib.util.find_spec("qdrant_client") is not None:

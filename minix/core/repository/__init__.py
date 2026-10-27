@@ -4,4 +4,6 @@ from .redis import RedisRepository
 import importlib.util
 if importlib.util.find_spec('qdrant_client'):
     from minix.core.repository.qdrant import QdrantRepository
+if importlib.util.find_spec('pgvector'):
+    from minix.core.repository.pgvector import PGVectorRepository
 

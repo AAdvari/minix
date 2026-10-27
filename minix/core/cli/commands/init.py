@@ -179,7 +179,7 @@ def init(
         "--extras",
         help=(
             "Comma-separated Minix PyPI extras for Docker and compose "
-            "(postgresql, mysql, vdb, clickhouse, ai, rag). "
+            "(postgresql, pgvector, mysql, vdb, clickhouse, ai, rag). "
             "SQL extras are also set from --db-driver / the SQL prompt. "
             "Default for non-SQL extras: infer from this environment."
         ),

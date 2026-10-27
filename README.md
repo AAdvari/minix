@@ -25,10 +25,12 @@
     - [Entities](#entities)
       - [SQL Entity](#sql-entity)
       - [Qdrant Entity (Vector DB)](#qdrant-entity-vector-db)
+      - [PGVector Entity (PostgreSQL vectors)](#pgvector-entity-postgresql-vectors)
       - [Redis Entity](#redis-entity)
     - [Repositories](#repositories)
       - [SQL Repository](#sql-repository)
       - [Qdrant Repository](#qdrant-repository)
+      - [PGVector Repository](#pgvector-repository)
     - [Services](#services)
     - [Controllers](#controllers)
     - [Connectors](#connectors)
@@ -59,6 +61,7 @@
     - [SQL drivers](#sql-drivers)
     - [AI Capabilities](#ai-capabilities)
     - [Vector DB (Qdrant)](#vector-db-qdrant)
+    - [Vector DB (pgvector)](#vector-db-pgvector)
     - [ClickHouse Support](#clickhouse-support)
     - [Install All Extras](#install-all-extras)
   - [Registry Usage](#registry-usage)
@@ -237,6 +240,24 @@ class DocumentEntity(QdrantEntity):
         return "documents"
 ```
 
+#### PGVector Entity (PostgreSQL vectors)
+
+Requires the `pgvector` extra and a PostgreSQL server with the `vector` extension.
+
+```python
+from sqlalchemy import Text
+from sqlalchemy.orm import Mapped, mapped_column
+from minix.core.entity import PGVectorEntity
+
+class DocumentEmbeddingEntity(PGVectorEntity):
+    vector_size = 1536
+
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+```
+
+PGVector entities are SQL entities: they include `id`, `created_at` and
+`updated_at`, plus a `vector` column of type `VECTOR(vector_size)`.
+
 #### Redis Entity
 
 ```python
@@ -306,6 +327,27 @@ class DocumentRepository(QdrantRepository[DocumentEntity]):
 - `insert(entities)` - Insert vectors
 - `query(entity, top_k)` - Similarity search
 - `delete(entity_ids)` - Delete vectors
+
+#### PGVector Repository
+
+```python
+from minix.core.repository import PGVectorRepository
+
+class DocumentEmbeddingRepository(PGVectorRepository[DocumentEmbeddingEntity]):
+    def get_distance(self) -> str:
+        return 'Cosine'  # or 'Euclid', 'Dot', 'Manhattan'
+```
+
+It extends `SqlRepository` (all SQL methods above, `sql_transaction()`
+included) and uses the registered `SqlConnector`, which must point at PostgreSQL.
+
+**Additional methods:**
+- `create_extension()` - Run `CREATE EXTENSION IF NOT EXISTS vector`
+- `search(vector, top_k, max_distance=None, **kwargs)` - Nearest neighbours, closest first; `kwargs` filter like `get_by`
+- `search_with_distance(vector, top_k, max_distance=None, **kwargs)` - Same, as `(entity, distance)` pairs
+
+`PGVectorService` exposes the same `search` / `search_with_distance` methods,
+plus `get_knn(entity, top_k)`, on top of `SqlService`.
 
 ### Services
 
@@ -887,6 +929,12 @@ pip install "minix[ai]"
 pip install "minix[vdb]"
 ```
 
+### Vector DB (pgvector)
+
+```bash
+pip install "minix[pgvector]"
+```
+
 ### ClickHouse Support
 
 ```bash
@@ -905,7 +953,7 @@ pip install "minix[rag]"
 ### Install All Extras
 
 ```bash
-pip install "minix[postgresql,mysql,ai,vdb,clickhouse,rag]"
+pip install "minix[postgresql,pgvector,mysql,ai,vdb,clickhouse,rag]"
 ```
 
 ---
