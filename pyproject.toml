@@ -24,11 +24,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Each SQL extra brings Alembic for `minix db` migrations.
 postgresql = [
     "psycopg[binary]>=3.1",
+    "alembic>=1.13",
 ]
 mysql = [
     "pymysql>=1.1.1",
+    "alembic>=1.13",
 ]
 ai = [
     "torch>=2.0",
@@ -63,6 +66,7 @@ rag = [
     "Pillow>=10.0.0",
     "python-multipart>=0.0.9",
     "psycopg[binary]>=3.1",
+    "alembic>=1.13",
 ]
 
 [project.scripts]

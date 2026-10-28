@@ -7,11 +7,13 @@ import typer
 from minix.core.cli.commands import add_component as add_component_cmd
 from minix.core.cli.commands import add_module as add_module_cmd
 from minix.core.cli.commands import add_rag as add_rag_cmd
+from minix.core.cli.commands import db as db_cmd
 from minix.core.cli.commands import init as init_cmd
 
 
 def register(app: typer.Typer) -> None:
     app.command("init")(init_cmd.init)
+    db_cmd.register(app)
 
     add_app = typer.Typer(
         help=(

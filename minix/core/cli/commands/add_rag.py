@@ -13,6 +13,7 @@ import typer
 from dotenv import dotenv_values
 
 from minix.core.cli.commands.init_scaffold import minix_pip_install_spec
+from minix.core.migrations.scaffold import initialized_connections
 
 _AUTH = "minix.core.modules.auth.AuthModule"
 _RAG = "minix.core.modules.rag.RagModule"
@@ -275,7 +276,11 @@ def rag():
         typer.echo(f"Added the rag extra in {', '.join(requirement_files)}; reinstall (e.g. poetry lock && poetry install).")
     elif not has_rag_extra:
         typer.echo('Install local dependencies: pip install "minix[rag]"')
-    typer.echo("Set your model provider API key in .env. Create the RAG SQL tables using your schema/migration workflow.")
+    typer.echo("Set your model provider API key in .env.")
+    if initialized_connections(root):
+        typer.echo('Create the RAG SQL tables: minix db makemigrations -m "add rag" && minix db migrate')
+    else:
+        typer.echo('Create the RAG SQL tables: minix db init && minix db makemigrations -m "add rag" && minix db migrate')
     if compose.exists():
         configured = dotenv_values(root / ".env").get("COMPOSE_FILE") or ""
         if "docker-compose.rag.yml" in configured:

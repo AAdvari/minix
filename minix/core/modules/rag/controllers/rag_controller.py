@@ -7,10 +7,13 @@ import tempfile
 import shutil
 import time
 import uuid
+from importlib.metadata import PackageNotFoundError, version as package_version
 from pathlib import Path
 
 from fastapi import HTTPException, UploadFile, File, Form, BackgroundTasks, Query, Depends, Security, Request
 from pydantic import ValidationError
+from sqlalchemy import inspect as sa_inspect
+from sqlalchemy.exc import SQLAlchemyError
 
 from minix.core.controller import Controller
 from minix.core.registry import Registry
@@ -138,6 +141,13 @@ async def get_health_auth_context(api_key: str | None = Security(API_KEY_HEADER)
         role=key_entity.role,
         api_key_id=key_entity.id,
     )
+
+
+def _minix_version() -> str:
+    try:
+        return package_version("minix")
+    except PackageNotFoundError:
+        return "unknown"
 
 
 async def _no_ingest_options() -> dict:
@@ -449,6 +459,17 @@ class RagController(Controller):
     def _health_extras(self) -> dict:
         """Extra keys for the `/health` payload."""
         return {}
+
+    def _missing_tables(self) -> list[str]:
+        """RAG tables that do not exist in their database yet."""
+        missing = []
+        for service in (self._svc_collection(), self._svc_document(), self._svc_chunk(),
+                        self._svc_job(), self._svc_search(), self._svc_query()):
+            repository = service.repository
+            table = repository.get_entity().__table__.name
+            if not sa_inspect(repository.sql_connector.get_engine()).has_table(table):
+                missing.append(table)
+        return missing
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -1756,15 +1777,24 @@ class RagController(Controller):
         @self._actual_router.get("/health")
         def health(auth: AuthContext | None = Depends(self.get_health_auth_dependency())):
             svc_col = self._svc_collection()
+            try:
+                pg_cols = [r.name for r in svc_col.list_all()]
+            except SQLAlchemyError:
+                missing = self._missing_tables()
+                if not missing:
+                    raise
+                raise HTTPException(status_code=503, detail=(
+                    f"RAG tables are missing: {', '.join(missing)}. Create them with: "
+                    'minix db makemigrations -m "add rag" && minix db migrate'
+                ))
             qdrant_cols = set(svc_col.list_qdrant_collections())
-            pg_cols = [r.name for r in svc_col.list_all()]
             can_show_collection_names = (
                 not RagConfig.ACCESS_CONTROL_ENABLED
                 or (auth is not None and auth.role == UserRole.ADMIN)
             )
             return {
                 "status": "healthy",
-                "version": "1.0.0",
+                "version": _minix_version(),
                 "llm_model": RagConfig.LLM_MODEL,
                 "qdrant_url": RagConfig.QDRANT_URL,
                 "collections": pg_cols if can_show_collection_names else [],

@@ -18,6 +18,7 @@ from minix.core.cli.commands.init_scaffold import (
     minix_pip_install_spec,
     resolve_minix_extras,
 )
+from minix.core.migrations.scaffold import scaffold_connection
 
 _TEMPLATE_DIR = Path(__file__).resolve().parents[2] / "conf" / "project_template"
 _SETTINGS_MODULE_LINE = "MINIX_SETTINGS_MODULE=config"
@@ -293,6 +294,11 @@ def init(
         )
         _write_if_missing(root, relative, content, created)
 
+    # The secondary engine's connection is named after its driver (see config.py).
+    for connection in ["default", *(d for d in drivers if d != primary)]:
+        if scaffold_connection(root, connection):
+            created.append(f"migrations/{connection}/")
+
     port_summary = ", ".join(f"{k}={v}" for k, v in ports.items())
     extras_label = render_kw["pip_spec"]
     db_label = "+".join(drivers)
@@ -302,4 +308,5 @@ def init(
     )
     if "rag" in features:
         typer.echo('Install local dependencies: pip install "minix[rag]"')
-        typer.echo("Set your model provider API key in .env. Create the RAG SQL tables using your schema/migration workflow.")
+        typer.echo("Set your model provider API key in .env.")
+    typer.echo('Create the SQL tables: minix db makemigrations -m "initial" && minix db migrate')

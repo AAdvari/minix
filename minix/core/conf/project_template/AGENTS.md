@@ -26,6 +26,9 @@ Minix exposes these CLI entry points (nothing else):
 | `minix add rag` | Enable built-in RAG in an **existing** PostgreSQL project |
 | `minix add module MODULE_NAME` | Scaffold a **feature module** under `src/modules/<name>/` |
 | `minix add controller\|task\|periodic\|helper\|consumer\|binding [NAME] --module=MODULE` | Add one piece to an **existing** module and wire it in `module.py` |
+| `minix db makemigrations -m "message"` | Generate a migration from SQL entity changes (`migrations/<connection>/versions/`) |
+| `minix db migrate` / `minix db downgrade -1` | Apply / revert migrations |
+| `minix db init` | Recreate `migrations/<connection>/` (`minix init` already creates it) |
 
 There is **no** short form like `minix add orders`. Module creation is always:
 
@@ -56,6 +59,9 @@ minix add module <snake_case_name>
 8. For shared SQL commits across modules/repos, use
    `from minix.core.connectors import sql_transaction` — do not open ad-hoc
    sessions that commit independently unless intentional.
+9. **Schema changes** → `minix db makemigrations -m "…"` then `minix db migrate`.
+   Never call `Base.metadata.create_all()` or hand-write `env.py`. Review each
+   generated revision before applying it.
 
 ---
 
@@ -119,9 +125,9 @@ poetry lock && poetry install  # or: pip install "minix[rag]"
 docker compose up --build
 ```
 
-Set the model provider's API key in `.env` and create SQL tables using the project's
-migration workflow. Local PDF ingestion needs Poppler. Repeated calls preserve
-the generated files. `--extras rag` at init has the same effect as `--rag`;
+Set the model provider's API key in `.env` and create the SQL tables with
+`minix db makemigrations -m "add rag" && minix db migrate`. Local PDF ingestion
+needs Poppler. Repeated calls preserve the generated files. `--extras rag` at init has the same effect as `--rag`;
 `--rag --no-extras` still enables RAG and its required services.
 
 ---
@@ -232,8 +238,9 @@ minix add module --help
 
 1. `minix add module <feature>`
 2. Edit entity columns / service methods / controller routes only as needed.
-3. Run the API via `entries/api.py` (e.g. `uvicorn entries.api:Api --reload`).
-4. For multi-repository writes that must succeed or fail together:
+3. `minix db makemigrations -m "add <feature>"` and `minix db migrate`.
+4. Run the API via `entries/api.py` (e.g. `uvicorn entries.api:Api --reload`).
+5. For multi-repository writes that must succeed or fail together:
 
 ```python
 from minix.core.connectors import sql_transaction
