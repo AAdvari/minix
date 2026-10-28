@@ -29,6 +29,7 @@ Minix exposes these CLI entry points (nothing else):
 | `minix db makemigrations -m "message"` | Generate a migration from SQL entity changes (`migrations/<connection>/versions/`) |
 | `minix db migrate` / `minix db downgrade -1` | Apply / revert migrations |
 | `minix db init` | Recreate `migrations/<connection>/` (`minix init` already creates it) |
+| `minix db current\|history\|heads\|branches\|show\|check\|stamp\|merge\|edit` | Alembic's command of the same name, run for the project's connections |
 
 There is **no** short form like `minix add orders`. Module creation is always:
 
@@ -61,7 +62,14 @@ minix add module <snake_case_name>
    sessions that commit independently unless intentional.
 9. **Schema changes** → `minix db makemigrations -m "…"` then `minix db migrate`.
    Never call `Base.metadata.create_all()` or hand-write `env.py`. Review each
-   generated revision before applying it.
+   generated revision before applying it (see [`minix db`](#minix-db)).
+10. **Never edit a migration that has been applied or committed.** Write a new
+    one instead. Never change an entity's `__tablename__` after its table has
+    been migrated; that is a rename and needs its own migration.
+11. **Ask the user before** `minix db downgrade`, `minix db stamp`, or any
+    migration that drops a table or column. They change or lose data.
+12. Before finishing a change that touched entities, run `minix db check`; it
+    fails when a migration is missing.
 
 ---
 
@@ -129,6 +137,54 @@ Set the model provider's API key in `.env` and create the SQL tables with
 `minix db makemigrations -m "add rag" && minix db migrate`. Local PDF ingestion
 needs Poppler. Repeated calls preserve the generated files. `--extras rag` at init has the same effect as `--rag`;
 `--rag --no-extras` still enables RAG and its required services.
+
+---
+
+## `minix db`
+
+Alembic migrations for the SQL entities of the modules in `installed_modules`.
+Each `DATABASES` connection has its own `migrations/<connection>/` and only
+manages the tables of entities bound to it (`add_binding(..., connection=...)`).
+
+```bash
+minix db makemigrations -m "add orders"   # needs the database running and at head
+minix db migrate                          # apply up to head
+minix db current                          # where the database is
+minix db history                          # all migrations
+minix db check                            # fails if entities changed without a migration
+```
+
+| Command | Use |
+|---------|-----|
+| `makemigrations -m "…"` | Generate a migration from entity changes. Writes nothing when there are none. |
+| `makemigrations --empty -m "…"` | Blank migration for data changes or hand-written DDL |
+| `migrate [REVISION]` | Apply migrations (default `head`) |
+| `downgrade REVISION` | Revert (`-1`, an id, `base`). Ask the user first. |
+| `current`, `history`, `heads`, `branches`, `show` | Inspect; extra arguments go to Alembic |
+| `check` | Missing-migration check |
+| `merge -m "merge" heads` | Join two heads after parallel branches each added a migration |
+| `stamp REVISION` | Record a revision without running it. Ask the user first. |
+
+Every command takes `--database/-d NAME`; without it, it runs for every
+connection that has a `migrations/` directory.
+
+**Review every generated migration before `migrate`:**
+
+- A renamed column or table appears as a drop plus an add, which loses data.
+  Replace it with `op.alter_column(..., new_column_name=...)` or `op.rename_table(...)`.
+- Adding an enum column on PostgreSQL needs the type created first:
+  `sa.Enum(..., name="x").create(op.get_bind(), checkfirst=True)`.
+- Tables no installed module owns are never dropped automatically. To drop a
+  removed module's tables, write it in an `--empty` migration.
+
+**Errors:**
+
+| Message | Fix |
+|---------|-----|
+| `Target database is not up to date` | `minix db migrate`, then `makemigrations` again |
+| `Multiple head revisions are present` / `Multiple heads are present` | `minix db merge -m "merge" heads`, then `minix db migrate` |
+| `No migrations set up` | `minix db init` |
+| Connection refused | Start the database (`docker compose up -d`) |
 
 ---
 
@@ -216,6 +272,25 @@ and appends `.add_*(...)` to the module chain. Running it again does nothing.
 `--module/-m` is required; the optional `NAME` argument sets the class name.
 Other options: `--path DIR`, `--force/-f`.
 
+**Names:**
+
+- A class name typed in PascalCase is kept as typed (`-e HTTPLog` → `HTTPLog`);
+  snake_case input is converted (`-e http_log` → `HttpLog`).
+- `--entity=ShopOrder` alone names the repository and service after it:
+  `ShopOrderSqlRepository`, `ShopOrderSqlService`. A binding that would share a
+  class with an existing `add_binding(...)` is rejected.
+
+**Table names** (`minix add binding`):
+
+| Entity | `__tablename__` | Example (module `orders`) |
+|--------|-----------------|---------------------------|
+| The module's first entity | the module name, pluralized | `orders` |
+| Every later entity | `<module>_<entity>` in snake_case | `orders_item`, `orders_http_log` |
+| Regenerated with `--force` | unchanged from the existing file | |
+
+The CLI writes the name explicitly and fails when it is already declared in
+the module's `entities/`. Do not remove or rename a generated `__tablename__`.
+
 ---
 
 ## Global options
@@ -230,6 +305,8 @@ minix -v
 minix --version
 minix init --help
 minix add module --help
+minix db --help
+minix db history --help    # Alembic's own help for passthrough commands
 ```
 
 ---
@@ -238,7 +315,7 @@ minix add module --help
 
 1. `minix add module <feature>`
 2. Edit entity columns / service methods / controller routes only as needed.
-3. `minix db makemigrations -m "add <feature>"` and `minix db migrate`.
+3. `minix db makemigrations -m "add <feature>"`, review the file, then `minix db migrate`.
 4. Run the API via `entries/api.py` (e.g. `uvicorn entries.api:Api --reload`).
 5. For multi-repository writes that must succeed or fail together:
 

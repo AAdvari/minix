@@ -68,6 +68,13 @@ def to_pascal(value: str) -> str:
     return "".join(part.capitalize() for part in snake.split("_") if part)
 
 
+def _class_name(raw: str) -> str:
+    """A name typed in PascalCase (e.g. ``HTTPLog``) is kept; others are converted."""
+    if raw[:1].isupper() and _IDENT_RE.match(raw) and "_" not in raw:
+        return raw
+    return to_pascal(raw)
+
+
 def singularize(snake: str) -> str:
     """Best-effort English singular for resource class names (orders → order)."""
     if snake.endswith("ies") and len(snake) > 3:
@@ -115,7 +122,7 @@ def resolve_class_name(raw: str | None, default_pascal: str, suffix: str = "") -
     if raw in (_DEFAULT_COMPONENT, ""):
         name = default_pascal
     else:
-        name = to_pascal(raw)
+        name = _class_name(raw)
     if suffix and not name.endswith(suffix):
         name = f"{name}{suffix}"
     if not _IDENT_RE.match(name):
@@ -298,7 +305,7 @@ def _resolve_suffixed(
         return None
     if raw in (_DEFAULT_COMPONENT, ""):
         return default
-    name = to_pascal(raw)
+    name = _class_name(raw)
     if name.endswith(preferred_suffix):
         return name
     # Accept FooRepository when preferred is SqlRepository, etc.
@@ -322,6 +329,7 @@ def _write(path: Path, content: str, spec: ModuleSpec) -> None:
 
 
 def _tpl_entity(spec: ModuleSpec) -> str:
+    table = f'\n    __tablename__ = "{spec.table_name}"\n' if spec.table_name else ""
     return f'''from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -330,9 +338,7 @@ from minix.core.entity import SqlEntity
 
 class {spec.entity_class}(SqlEntity):
     """SQL entity for the ``{spec.module_name}`` module."""
-
-    __tablename__ = "{spec.table_name}"
-
+{table}
     name: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     def __repr__(self) -> str:
