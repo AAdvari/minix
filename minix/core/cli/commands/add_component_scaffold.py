@@ -8,9 +8,12 @@ code is never rewritten; only new lines / tokens are inserted.
 from __future__ import annotations
 
 import ast
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
+
+from minix.core.utils import to_snake_case
 
 from minix.core.cli.commands.add_module_scaffold import (
     _DEFAULT_COMPONENT,
@@ -115,7 +118,7 @@ def _find_export_assign(tree: ast.Module) -> ast.Assign | ast.AnnAssign | None:
 
 
 def _wired_calls(tree: ast.Module, method: str) -> list[tuple[str, ...]]:
-    """Positional ``Name`` args of every ``.<method>(...)`` call in the file."""
+    """Positional ``Name`` args of every ``.<method>(...)`` call, in source order."""
     found = []
     for node in ast.walk(tree):
         if (
@@ -123,10 +126,37 @@ def _wired_calls(tree: ast.Module, method: str) -> list[tuple[str, ...]]:
             and isinstance(node.func, ast.Attribute)
             and node.func.attr == method
         ):
-            found.append(
-                tuple(a.id for a in node.args if isinstance(a, ast.Name))
-            )
-    return found
+            # ast.walk visits a call chain outermost (= last) call first.
+            position = (node.func.end_lineno, node.func.end_col_offset)
+            found.append((position, tuple(a.id for a in node.args if isinstance(a, ast.Name))))
+    return [args for _, args in sorted(found)]
+
+
+_TABLENAME_RE = re.compile(r"""^\s*__tablename__\s*=\s*["']([^"']+)["']""", re.MULTILINE)
+
+
+def _binding_table(package: Path, module_name: str, spec: ModuleSpec) -> str | None:
+    """Table name for an entity added with ``minix add binding``.
+
+    The module's first entity takes the module's name, as in ``minix add module``.
+    Later ones get ``<module>_<entity>`` (SqlEntity's own rule), written out so it
+    holds under any ``--path``. Decided from ``entities/``, which also sees entities
+    wired with the deprecated ``add_entity``.
+    """
+    entities = package / "entities"
+    target = entities / f"{spec.entity_file}.py"
+    if target.exists():
+        # --force regenerates the file; keep the table it already maps to.
+        found = _TABLENAME_RE.search(target.read_text())
+        return found.group(1) if found else None
+    others = [p for p in entities.glob("*.py") if p.name != "__init__.py"]
+    if not others:
+        return spec.table_name
+    table = f"{module_name}_{to_snake_case(spec.entity_class.removesuffix('Entity'))}"
+    for path in others:
+        if table in _TABLENAME_RE.findall(path.read_text()):
+            raise ValueError(f"Table {table!r} is already used by {path}. Pass a different --entity.")
+    return table
 
 
 def _read_existing(module_py: Path) -> _ExistingModule:
@@ -337,6 +367,7 @@ def add_component(
                     f".add_binding({', '.join(wired_binding)}). Pass distinct "
                     "--entity / --repository / --service names."
                 )
+        spec.table_name = _binding_table(package, name, spec)
 
     classes: list[str] = []
     imports: list[tuple[str, str]] = []

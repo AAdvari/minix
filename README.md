@@ -69,6 +69,13 @@
     - [Quick map](#quick-map)
     - [Global options](#global-options)
     - [`minix init`](#minix-init)
+    - [`minix db`](#minix-db)
+      - [Migration workflow](#migration-workflow)
+      - [Migration commands](#migration-commands)
+      - [Revision targets](#revision-targets)
+      - [Migration recipes](#migration-recipes)
+      - [How migrations work](#how-migrations-work)
+      - [Migration troubleshooting](#migration-troubleshooting)
     - [`minix add module`](#minix-add-module)
       - [SQL binding (all or none)](#sql-binding-all-or-none)
       - [Flags](#flags)
@@ -713,7 +720,7 @@ every request when the key is set but empty): `.env` gets a random key and
 Repeated `minix add rag` calls leave the generated files unchanged. Afterwards,
 reinstall (for example `poetry lock && poetry install`), install Poppler for local
 PDF ingestion, set the model provider's API key in `.env`, and create the SQL tables
-as described below.
+with `minix db makemigrations -m "add rag" && minix db migrate` (see [`minix db`](#minix-db)).
 
 **Manual registration** — in a project from `minix init` with PostgreSQL as the `default`
 database, add the module to `installed_modules` in `config.py`:
@@ -728,8 +735,15 @@ installed_modules: list[str] = Field(
 ```
 
 `bootstrap_from_settings()` (already called in `entries/api.py`) then registers
-the connectors and installs the module. Create its tables once, or manage the
-schema with Alembic:
+the connectors and installs the module. Create its tables with
+[`minix db`](#minix-db):
+
+```bash
+minix db makemigrations -m "add rag"
+minix db migrate
+```
+
+Without migrations, create them once from code instead:
 
 ```python
 from minix.core.connectors import SqlConnector
@@ -998,6 +1012,10 @@ minix add module --help
 | New project in cwd | `minix init APP_NAME` |
 | New project with RAG | `minix init APP_NAME --rag` |
 | Enable built-in RAG in an existing project | `minix add rag` |
+| Set up migrations (once per project) | `minix db init` |
+| Generate a migration from entity changes | `minix db makemigrations -m "message"` |
+| Apply / revert migrations | `minix db migrate` / `minix db downgrade -1` |
+| Inspect migrations | `minix db current` / `minix db history` |
 | New feature module | `minix add module MODULE_NAME` |
 | Add to existing module | `minix add controller\|task\|periodic\|helper\|consumer\|binding [NAME] --module=MODULE` |
 | Version | `minix -v` / `minix --version` |
@@ -1066,6 +1084,7 @@ installs the engines you selected.
 | `.dockerignore` | Build context excludes |
 | `AGENTS.md` | CLI guide for AI coding agents (prefer `minix` over hand-scaffolding) |
 | `entries/` | `api.py`, `worker.py`, `beat.py` process entrypoints |
+| `migrations/<connection>/` | Alembic setup per SQL connection, driven by [`minix db`](#minix-db) |
 
 **App wiring after init** (settings, not legacy `app_connectors.py` / `app_modules.py`):
 
@@ -1108,6 +1127,192 @@ pip install "minix[postgresql]"
 pip install "minix[mysql]"
 pip install "minix[postgresql,mysql]"
 ```
+
+### `minix db`
+
+Database migrations for your SQL entities, built on
+[Alembic](https://alembic.sqlalchemy.org/). If you know Django, the commands
+will feel familiar: change an entity, run `makemigrations`, review the file,
+then run `migrate`.
+
+Minix compares the database with the SQL entities of the modules in
+`INSTALLED_MODULES`, so you never list tables by hand. Alembic ships with the
+`postgresql`, `mysql` and `rag` extras.
+
+#### Migration workflow
+
+`minix init` already sets up migrations. For a project created another way,
+run `minix db init` once.
+
+```bash
+# 1. Change an entity (or add a module with `minix add module orders`)
+# 2. Generate a migration; the database must be running
+minix db makemigrations -m "add orders"
+#    → default: wrote migrations/default/versions/3f2a9c1b7d4e_add_orders.py
+
+# 3. Read the generated file and fix anything autogenerate got wrong
+# 4. Apply it
+minix db migrate
+#    → default: migrated to head
+
+# 5. Commit the file in migrations/<connection>/versions/ with the entity change
+```
+
+On every other machine, including CI, staging and production, only run
+`minix db migrate`.
+
+Autogenerate is a draft, not a guarantee. Always read the file before you
+apply it. In particular, a renamed column or table shows up as a drop plus an
+add, which loses data. Change it to `op.alter_column(..., new_column_name=...)`
+or `op.rename_table(...)`.
+
+#### Migration commands
+
+These commands do more than Alembic's equivalents:
+
+| Command | What it does | Options |
+|---------|--------------|---------|
+| `minix db init` | Creates `migrations/<connection>/` for each PostgreSQL / MySQL connection. Existing files are kept. | `--database/-d NAME` (repeatable; default: every PostgreSQL / MySQL connection) |
+| `minix db makemigrations` | Compares the entities with the live database and writes a migration. Writes nothing when there are no changes. | `-m/--message`, `--database/-d`, `--empty` (blank migration to write by hand) |
+| `minix db migrate [REVISION]` | Applies migrations, up to `head` by default. | `--database/-d` |
+| `minix db downgrade REVISION` | Reverts migrations. | `--database/-d` |
+
+These run the Alembic command of the same name. Minix picks the connection and
+loads `config.py` and `.env`; every other argument goes to Alembic unchanged,
+and `minix db <command> --help` shows Alembic's own help:
+
+| Command | What it does | Example |
+|---------|--------------|---------|
+| `current` | Shows the revision the database is at | `minix db current` |
+| `history` | Lists migrations, newest first | `minix db history -v`, `minix db history -r-3:current` (no space after `-r`) |
+| `heads` | Shows the latest revision(s); more than one means history has split | `minix db heads` |
+| `branches` | Shows where history splits | `minix db branches` |
+| `show` | Shows one migration | `minix db show 3f2a` |
+| `check` | Exits non-zero when entities have changes without a migration | `minix db check` |
+| `stamp` | Records a revision in the database without running anything | `minix db stamp head` |
+| `merge` | Writes a migration that joins two heads | `minix db merge -m "merge" heads` |
+| `edit` | Opens a migration in `$EDITOR` | `minix db edit head` |
+
+All commands accept `--database/-d NAME` (repeatable). Without it, they run for
+every connection that has a `migrations/` directory, with an `== name ==`
+header per connection when there are several.
+
+#### Revision targets
+
+`migrate`, `downgrade`, `stamp` and `show` take a revision:
+
+| Target | Meaning |
+|--------|---------|
+| `head` | The latest migration |
+| `heads` | Every head, when history has split |
+| `base` | Before the first migration (`downgrade base` reverts everything) |
+| `3f2a9c1b7d4e` or `3f2a` | A revision id, or any unique prefix of one |
+| `-1`, `-2` | Steps back from the current revision (`downgrade`) |
+| `+1`, `+2` | Steps forward from the current revision (`migrate`) |
+
+#### Migration recipes
+
+**Write a data migration.** Generate an empty migration and fill in
+`upgrade()` and `downgrade()`:
+
+```bash
+minix db makemigrations --empty -m "backfill order status"
+```
+
+```python
+def upgrade() -> None:
+    op.execute("UPDATE orders SET status = 'NEW' WHERE status IS NULL")
+
+
+def downgrade() -> None:
+    pass
+```
+
+**Catch missing migrations in CI.** With the database migrated to head, this
+fails when someone changed an entity without running `makemigrations`:
+
+```bash
+minix db migrate && minix db check
+```
+
+**Adopt migrations on a database that already has its tables.**
+`makemigrations` compares with the live database, so against a database that
+already has the tables it finds nothing to write. Generate the first migration
+against an empty database, then mark existing databases as up to date:
+
+```bash
+# Against an empty local database
+minix db makemigrations -m "initial"
+minix db migrate
+
+# Against each database that already has the tables (staging, production)
+minix db stamp head
+```
+
+**Resolve two migrations from parallel branches.** When two branches each add a
+migration, `migrate` and `makemigrations` fail with a "multiple heads" error.
+Join them, then migrate:
+
+```bash
+minix db heads                    # shows both
+minix db merge -m "merge" heads
+minix db migrate
+```
+
+**Remove a module.** Its tables stay in the database, because Minix never drops
+tables that no installed module owns. To drop them, write the drop in an empty
+migration (`makemigrations --empty`, then `op.drop_table("orders")`).
+
+**Use several databases.** Each `settings.DATABASES` connection gets its own
+`migrations/<connection>/` and only manages the tables of entities bound to it
+with `add_binding(..., connection="analytics")`:
+
+```bash
+minix db init -d analytics
+minix db makemigrations -m "add events" -d analytics
+minix db migrate                  # every connection
+minix db migrate -d analytics     # one connection
+```
+
+**Preview the SQL instead of running it.** Use Alembic directly with `--sql`:
+
+```bash
+alembic -c migrations/default/alembic.ini upgrade head --sql
+```
+
+**Run in Docker.** Migrate before the new app version starts serving:
+
+```bash
+docker compose run --rm app minix db migrate
+```
+
+#### How migrations work
+
+- `migrations/<connection>/` holds `alembic.ini`, `env.py`, `script.py.mako`
+  and `versions/`. `env.py` calls `minix.core.migrations.run_migrations`, which
+  loads `.env` and `config.py`, so plain `alembic -c migrations/<connection>/alembic.ini …`
+  works on the same files.
+- Each connection compares only the tables of the entities bound to it. Tables
+  that no installed module owns, including other connections' tables, are never
+  touched.
+- The `default` connection records its revision in `alembic_version`; others use
+  `alembic_version_<connection>`, so two connections can share one database.
+- On PostgreSQL, generated downgrades also drop the enum types of the tables
+  they drop, so a downgrade followed by `migrate` works.
+- ClickHouse connections are skipped, because Alembic does not support them.
+
+#### Migration troubleshooting
+
+| Message | Fix |
+|---------|-----|
+| `No config.py found` | Run the command in the project root. |
+| `Alembic is not installed` | `pip install "minix[postgresql]"` (or `mysql`). |
+| `No migrations set up` / `No migrations for 'x'` | `minix db init`, or `minix db init -d x`. |
+| `Target database is not up to date` | `minix db migrate`, then run `makemigrations` again. |
+| `Multiple head revisions are present` / `Multiple heads are present` | `minix db merge -m "merge" heads`, then `minix db migrate`. |
+| Connection refused | Start the database (`docker compose up -d`) and check `DB_*` in `.env`. |
+| `type "…" already exists` on PostgreSQL | An enum type was left behind by a downgrade. Drop it in the migration (`op.execute('DROP TYPE IF EXISTS "name"')`), or by hand. |
+| `type "…" does not exist` after adding an enum column | Alembic creates enum types with new tables but not with new columns. Add `sa.Enum(..., name="name").create(op.get_bind(), checkfirst=True)` before `op.add_column(...)`. |
 
 ### `minix add module`
 
@@ -1206,7 +1411,7 @@ src/modules/<name>/
 #### After scaffolding
 
 1. Confirm `INSTALLED_MODULES` contains e.g. `"src.modules.orders.OrdersModule"`.
-2. Implement fields on the entity; add an Alembic migration if the app uses one.
+2. Implement fields on the entity, then `minix db makemigrations -m "add orders" && minix db migrate`.
 3. Expand service / controller as needed.
 4. Restart API / worker.
 
